@@ -1,0 +1,8 @@
+# setup
+
+## binaries
+
+- ics721_base.wasm: checksum 2519218a21407537949c53edf964163f0359857bc497aba561b795bf085178b6
+- cw721_base.wasm: checksum bf1652988c7a633969221ccdd7d2dcb04cfa3081af31db4478d01e9dcdccda02
+- cw_ics721_incoming_proxy_base.wasm: checksum 32dd48b27688b4f7783bccd506006b6c0754db79deccca92a9db13d8e4aa7355
+- cw_ics721_outgoing_proxy_base.wasm: checksum 619e6efa328b4b8de59e79815fd53db599d2747e5219c650e353766d212b4066
