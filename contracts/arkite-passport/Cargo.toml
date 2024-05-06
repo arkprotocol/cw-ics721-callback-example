@@ -10,5 +10,16 @@ cosmwasm-storage = { workspace = true }
 cw-storage-plus = { workspace = true }
 ics721 = { workspace = true }
 cw-cii = { workspace = true }
+cw-utils = { workspace = true }
 cw2 = { workspace = true }
+cw721-base = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+cw-multi-test = { workspace = true }
+cw-ics721-incoming-proxy-base = { workspace = true }
+#cw-rate-limiter = { workspace = true }
+cw-ics721-outgoing-proxy-rate-limit = { workspace = true }
+ics721-base = { workspace = true }
+sha2 = { workspace = true }

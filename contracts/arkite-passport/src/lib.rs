@@ -10,3 +10,6 @@ pub(crate) const INSTANTIATE_CW721_REPLY_ID: u64 = 0;
 pub(crate) const INSTANTIATE_INCOMING_PROXY_REPLY_ID: u64 = 1;
 /// Submessage reply ID used for instantiating the proxy contract.
 pub(crate) const INSTANTIATE_OUTGOING_PROXY_REPLY_ID: u64 = 2;
+
+#[cfg(test)]
+pub mod testing;

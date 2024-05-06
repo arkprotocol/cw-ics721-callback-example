@@ -4,9 +4,7 @@ use cw_cii::ContractInstantiateInfo;
 #[cw_serde]
 pub struct InstantiateMsg {
     pub cw721_base: ContractInstantiateInfo,
-    pub ics721_base: ContractInstantiateInfo,
-    pub incoming_proxy: ContractInstantiateInfo,
-    pub outgoing_proxy: ContractInstantiateInfo,
+    // pub ics721_base: ContractInstantiateInfo,
 }
 
 #[cw_serde]
@@ -18,7 +16,7 @@ pub enum ExecuteMsg {
 #[derive(QueryResponses)]
 pub enum QueryMsg {
     #[returns(String)]
-    Test {},
+    CW721 {},
 }
 
 #[cw_serde]
