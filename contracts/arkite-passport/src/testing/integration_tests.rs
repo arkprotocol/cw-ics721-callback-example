@@ -22,8 +22,11 @@ use crate::{
     msg::{InstantiateMsg, QueryMsg},
 };
 
+use ics721::msg::{InstantiateMsg as Ics721InstantiateMsg, MigrateMsg as Ics721MigrateMsg};
+
 const ARKITE_WALLET: &str = "arkite";
 const BECH32_PREFIX_HRP: &str = "ark";
+const WHITELISTED_CHANNEL: &str = "channel";
 
 type MockRouter = Router<
     BankKeeper,
@@ -99,8 +102,12 @@ struct Test {
     app: MockApp,
     creator: Addr,
     code_id_cw721: u64,
+    code_id_ics721: u64,
     addr_arkite_contract: Addr,
     addr_cw721_contract: Addr,
+    addr_ics721_contract: Addr,
+    addr_outgoing_proxy_contract: Addr,
+    addr_incoming_proxy_contract: Addr,
     nfts_minted: usize,
 }
 
@@ -108,7 +115,7 @@ fn no_init(_router: &mut MockRouter, _api: &dyn Api, _storage: &mut dyn Storage)
 
 impl Test {
     /// Test setup with optional pauser and proxy contracts.
-    fn new(channels: Option<Vec<String>>) -> Self {
+    fn new() -> Self {
         let mut app = AppBuilder::new()
             .with_wasm::<WasmKeeper<Empty, Empty>>(
                 WasmKeeper::new().with_address_generator(MockAddressGenerator),
@@ -118,31 +125,7 @@ impl Test {
             .build(no_init);
         let code_id_arkite_passport = app.store_code(arkite_passport_contract());
         let code_id_cw721 = app.store_code(cw721_base_contract());
-        let ics721_id = app.store_code(ics721_contract());
-
-        let code_id_outgoing_proxy = app.store_code(outgoing_proxy_contract());
-        let outgoing_proxy = ContractInstantiateInfo {
-            code_id: code_id_outgoing_proxy,
-            msg: to_json_binary(&cw_ics721_outgoing_proxy_rate_limit::msg::InstantiateMsg {
-                rate_limit: cw_ics721_outgoing_proxy_rate_limit::Rate::PerBlock(10),
-                origin: None,
-            })
-            .unwrap(),
-            admin: Some(Admin::Instantiator {}),
-            label: "outgoing proxy rate limit".to_string(),
-        };
-
-        let code_id_incoming_proxy = app.store_code(incoming_proxy_contract());
-        let incoming_proxy = ContractInstantiateInfo {
-            code_id: code_id_incoming_proxy,
-            msg: to_json_binary(&cw_ics721_incoming_proxy_base::msg::InstantiateMsg {
-                origin: None,
-                channels,
-            })
-            .unwrap(),
-            admin: Some(Admin::Instantiator {}),
-            label: "incoming proxy".to_string(),
-        };
+        let code_id_ics721 = app.store_code(ics721_contract());
 
         let creator = app.api().addr_make(ARKITE_WALLET);
         let addr_arkite_contract = app
@@ -166,6 +149,21 @@ impl Test {
                         code_id: code_id_cw721,
                         label: "arkite passport".to_string(),
                     },
+                    ics721_base: ContractInstantiateInfo {
+                        admin: Some(Admin::Address {
+                            addr: creator.to_string(),
+                        }),
+                        msg: to_json_binary(&Ics721InstantiateMsg {
+                            cw721_base_code_id: code_id_cw721,
+                            incoming_proxy: None,
+                            outgoing_proxy: None,
+                            pauser: Some(creator.to_string()),
+                            cw721_admin: None,
+                        })
+                        .unwrap(),
+                        code_id: code_id_ics721,
+                        label: "arkite passport".to_string(),
+                    },
                 },
                 &[],
                 "cw721-base",
@@ -178,12 +176,64 @@ impl Test {
             .query_wasm_smart(addr_arkite_contract.clone(), &QueryMsg::CW721 {})
             .unwrap();
 
+        let addr_ics721_contract: Addr = app
+            .wrap()
+            .query_wasm_smart(addr_arkite_contract.clone(), &QueryMsg::ICS721 {})
+            .unwrap();
+
+        let code_id_outgoing_proxy = app.store_code(outgoing_proxy_contract());
+        let addr_outgoing_proxy_contract = app
+            .instantiate_contract(
+                code_id_outgoing_proxy,
+                creator.clone(),
+                &cw_ics721_outgoing_proxy_rate_limit::msg::InstantiateMsg {
+                    rate_limit: cw_ics721_outgoing_proxy_rate_limit::Rate::PerBlock(10),
+                    origin: None,
+                },
+                &[],
+                "cw721-base",
+                None,
+            )
+            .unwrap();
+
+        let code_id_incoming_proxy = app.store_code(incoming_proxy_contract());
+        let addr_incoming_proxy_contract = app
+            .instantiate_contract(
+                code_id_incoming_proxy,
+                creator.clone(),
+                &cw_ics721_incoming_proxy_base::msg::InstantiateMsg {
+                    origin: None,
+                    channels: Some(vec![WHITELISTED_CHANNEL.to_string()]),
+                },
+                &[],
+                "cw721-base",
+                None,
+            )
+            .unwrap();
+        app.migrate_contract(
+            creator.clone(),
+            addr_ics721_contract.clone(),
+            &Ics721MigrateMsg::WithUpdate {
+                cw721_base_code_id: None,
+                incoming_proxy: Some(addr_incoming_proxy_contract.to_string()),
+                outgoing_proxy: Some(addr_outgoing_proxy_contract.to_string()),
+                pauser: None,
+                cw721_admin: None,
+            },
+            code_id_ics721,
+        )
+        .unwrap();
+
         Self {
             app,
             creator,
             code_id_cw721,
+            code_id_ics721,
             addr_arkite_contract,
             addr_cw721_contract,
+            addr_ics721_contract,
+            addr_outgoing_proxy_contract,
+            addr_incoming_proxy_contract,
             nfts_minted: 0,
         }
     }
@@ -192,6 +242,13 @@ impl Test {
         self.app
             .wrap()
             .query_wasm_smart(self.addr_arkite_contract.clone(), &QueryMsg::CW721 {})
+            .unwrap()
+    }
+
+    fn query_ics721(&mut self) -> Addr {
+        self.app
+            .wrap()
+            .query_wasm_smart(self.addr_arkite_contract.clone(), &QueryMsg::ICS721 {})
             .unwrap()
     }
 
@@ -286,9 +343,11 @@ fn outgoing_proxy_contract() -> Box<dyn Contract<Empty>> {
 
 #[test]
 fn test_instantiate() {
-    let mut test = Test::new(None);
+    let mut test = Test::new();
 
     // check stores are properly initialized
     let cw721 = test.query_cw721();
     assert_eq!(cw721, test.addr_cw721_contract);
+    let ics721 = test.query_ics721();
+    assert_eq!(ics721, test.addr_ics721_contract);
 }
