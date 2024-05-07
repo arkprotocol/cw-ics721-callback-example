@@ -1,30 +1,31 @@
 use anyhow::Result;
 use cosmwasm_std::{
-    instantiate2_address, to_json_binary, Addr, Api, CanonicalAddr, Coin, DepsMut, Empty, Env,
-    GovMsg, MemoryStorage, Reply, Response, Storage,
+    instantiate2_address, to_json_binary, Addr, Api, CanonicalAddr, DepsMut, Empty, Env, GovMsg,
+    MemoryStorage, Reply, Response, Storage,
 };
 use cw721_base::{
-    msg::{InstantiateMsg as Cw721InstantiateMsg, QueryMsg as Cw721QueryMsg},
+    msg::{AllNftInfoResponse, InstantiateMsg as Cw721InstantiateMsg, NftExtensionMsg},
     DefaultOptionalCollectionExtension, DefaultOptionalCollectionExtensionMsg,
-    DefaultOptionalNftExtension,
+    DefaultOptionalNftExtension, NftExtension, Ownership,
 };
 use cw_cii::{Admin, ContractInstantiateInfo};
 use cw_multi_test::{
-    addons::MockApiBech32, AddressGenerator, App, AppBuilder, BankKeeper, Contract,
+    addons::MockApiBech32, AddressGenerator, App, AppBuilder, AppResponse, BankKeeper, Contract,
     ContractWrapper, DistributionKeeper, Executor, FailingModule, IbcAcceptingModule, Router,
     StakeKeeper, StargateFailing, WasmKeeper,
 };
-use ics721::{state::UniversalAllNftInfoResponse, ContractError};
+use ics721::ContractError;
 use sha2::{digest::Update, Digest, Sha256};
 
 use crate::{
     execute,
-    msg::{InstantiateMsg, QueryMsg},
+    msg::{ExecuteMsg, InstantiateMsg, QueryMsg},
 };
 
 use ics721::msg::{InstantiateMsg as Ics721InstantiateMsg, MigrateMsg as Ics721MigrateMsg};
 
 const ARKITE_WALLET: &str = "arkite";
+const NFT_OWNER_WALLET: &str = "nft_owner";
 const BECH32_PREFIX_HRP: &str = "ark";
 const WHITELISTED_CHANNEL: &str = "channel";
 
@@ -101,6 +102,7 @@ impl MockAddressGenerator {
 struct Test {
     app: MockApp,
     creator: Addr,
+    nft_owner: Addr,
     code_id_cw721: u64,
     code_id_ics721: u64,
     addr_arkite_contract: Addr,
@@ -108,7 +110,6 @@ struct Test {
     addr_ics721_contract: Addr,
     addr_outgoing_proxy_contract: Addr,
     addr_incoming_proxy_contract: Addr,
-    nfts_minted: usize,
 }
 
 fn no_init(_router: &mut MockRouter, _api: &dyn Api, _storage: &mut dyn Storage) {}
@@ -133,6 +134,7 @@ impl Test {
                 code_id_arkite_passport,
                 creator.clone(),
                 &InstantiateMsg {
+                    nft_extension: Test::default_nft_extension_msg(),
                     cw721_base: ContractInstantiateInfo {
                         admin: Some(Admin::Instantiator {}),
                         msg: to_json_binary(&Cw721InstantiateMsg::<
@@ -141,7 +143,7 @@ impl Test {
                             name: "name".to_string(),
                             symbol: "symbol".to_string(),
                             collection_info_extension: None,
-                            minter: Some(creator.to_string()),
+                            minter: None,
                             creator: Some(creator.to_string()),
                             withdraw_address: None,
                         })
@@ -224,9 +226,11 @@ impl Test {
         )
         .unwrap();
 
+        let nft_owner = app.api().addr_make(NFT_OWNER_WALLET);
         Self {
             app,
             creator,
+            nft_owner,
             code_id_cw721,
             code_id_ics721,
             addr_arkite_contract,
@@ -234,8 +238,38 @@ impl Test {
             addr_ics721_contract,
             addr_outgoing_proxy_contract,
             addr_incoming_proxy_contract,
-            nfts_minted: 0,
         }
+    }
+
+    fn default_nft_extension_msg() -> NftExtensionMsg {
+        NftExtensionMsg {
+            image: Some(Some("ipfs://interchain.passport".to_string())),
+            image_data: None,
+            external_url: None,
+            description: None,
+            name: None,
+            attributes: None,
+            background_color: None,
+            animation_url: None,
+            youtube_url: None,
+        }
+    }
+
+    fn query_supply(&mut self) -> u64 {
+        self.app
+            .wrap()
+            .query_wasm_smart(self.addr_arkite_contract.clone(), &QueryMsg::Supply {})
+            .unwrap()
+    }
+
+    fn query_nft_extension_msg(&mut self) -> NftExtensionMsg {
+        self.app
+            .wrap()
+            .query_wasm_smart(
+                self.addr_arkite_contract.clone(),
+                &QueryMsg::NftExtensionMsg {},
+            )
+            .unwrap()
     }
 
     fn query_cw721(&mut self) -> Addr {
@@ -252,7 +286,38 @@ impl Test {
             .unwrap()
     }
 
-    fn query_cw721_all_nft_info(&mut self, token_id: String) -> UniversalAllNftInfoResponse {
+    fn query_cw721_minter_ownership(&mut self) -> Ownership<Addr> {
+        self.app
+            .wrap()
+            .query_wasm_smart(
+                self.addr_cw721_contract.clone(),
+                &cw721_base::msg::QueryMsg::<
+                    DefaultOptionalNftExtension,
+                    DefaultOptionalCollectionExtension,
+                    Empty,
+                >::GetMinterOwnership {},
+            )
+            .unwrap()
+    }
+
+    fn query_cw721_creator_ownership(&mut self) -> Ownership<Addr> {
+        self.app
+            .wrap()
+            .query_wasm_smart(
+                self.addr_cw721_contract.clone(),
+                &cw721_base::msg::QueryMsg::<
+                    DefaultOptionalNftExtension,
+                    DefaultOptionalCollectionExtension,
+                    Empty,
+                >::GetCreatorOwnership {},
+            )
+            .unwrap()
+    }
+
+    fn query_cw721_all_nft_info(
+        &mut self,
+        token_id: String,
+    ) -> AllNftInfoResponse<DefaultOptionalNftExtension> {
         self.app
             .wrap()
             .query_wasm_smart(
@@ -269,26 +334,13 @@ impl Test {
             .unwrap()
     }
 
-    fn execute_cw721_mint(&mut self, owner: Addr) -> Result<String, anyhow::Error> {
-        self.nfts_minted += 1;
-
-        self.app
-            .execute_contract(
-                self.creator.clone(),
-                self.addr_cw721_contract.clone(),
-                &cw721_base::msg::ExecuteMsg::<
-                    DefaultOptionalNftExtension,
-                    DefaultOptionalCollectionExtension,
-                    Empty,
-                >::Mint {
-                    token_id: self.nfts_minted.to_string(),
-                    owner: owner.to_string(),
-                    token_uri: None,
-                    extension: Default::default(),
-                },
-                &[],
-            )
-            .map(|_| self.nfts_minted.to_string())
+    fn execute_cw721_mint(&mut self) -> Result<AppResponse, anyhow::Error> {
+        self.app.execute_contract(
+            self.nft_owner.clone(),
+            self.addr_arkite_contract.clone(),
+            &ExecuteMsg::Mint {},
+            &[],
+        )
     }
 }
 
@@ -350,4 +402,45 @@ fn test_instantiate() {
     assert_eq!(cw721, test.addr_cw721_contract);
     let ics721 = test.query_ics721();
     assert_eq!(ics721, test.addr_ics721_contract);
+    let supply = test.query_supply();
+    assert_eq!(supply, 0);
+    let nft_extension_msg = test.query_nft_extension_msg();
+    assert_eq!(nft_extension_msg, Test::default_nft_extension_msg());
+
+    // cw721: check minter is arkite contract and creator is arkite wallet
+    let minter_owner_ship = test.query_cw721_minter_ownership();
+    assert_eq!(
+        minter_owner_ship.owner,
+        Some(test.addr_arkite_contract.clone())
+    );
+    let creator_owner_ship = test.query_cw721_creator_ownership();
+    assert_eq!(creator_owner_ship.owner, Some(test.creator.clone()));
+}
+
+#[test]
+fn test_mint() {
+    let mut test = Test::new();
+
+    test.execute_cw721_mint().unwrap();
+
+    // assert results
+    let supply = test.query_supply();
+    assert_eq!(supply, 1);
+
+    let all_nft_info = test.query_cw721_all_nft_info("0".to_string());
+    assert_eq!(all_nft_info.access.owner, test.nft_owner);
+    assert_eq!(
+        all_nft_info.info.extension,
+        Some(NftExtension {
+            image: Some("ipfs://interchain.passport".to_string()),
+            image_data: None,
+            external_url: None,
+            description: None,
+            name: None,
+            attributes: None,
+            background_color: None,
+            animation_url: None,
+            youtube_url: None,
+        })
+    );
 }

@@ -12,4 +12,7 @@ pub enum ContractError {
 
     #[error("unrecognised reply ID")]
     UnrecognisedReplyId {},
+
+    #[error("Failed to ming NFt: {error} with token_id: {token_id}")]
+    MintFailed { error: String, token_id: u64 },
 }
