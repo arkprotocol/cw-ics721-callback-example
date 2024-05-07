@@ -1,12 +1,16 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Reply, Response, StdResult,
-    SubMsg, SubMsgResult, WasmMsg,
+    from_json, to_json_binary, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Reply, Response,
+    StdResult, SubMsg, SubMsgResult, WasmMsg,
 };
 use cw2::set_contract_version;
-use cw721_base::{DefaultOptionalCollectionExtensionMsg, DefaultOptionalNftExtensionMsg};
+use cw721_base::{
+    receiver::Cw721ReceiveMsg, DefaultOptionalCollectionExtensionMsg,
+    DefaultOptionalNftExtensionMsg,
+};
 use cw_utils::parse_reply_instantiate_data;
+use ics721_types::ibc_types::IbcOutgoingMsg;
 
 use crate::{
     error::ContractError,
@@ -45,36 +49,75 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    let response = Response::default();
     match msg {
-        ExecuteMsg::Mint {} => {
-            let cw721 = ADDR_CW721.load(deps.storage)?;
-            let token_id = SUPPLY.load(deps.storage)?;
-            let nft_extension_msg = NFT_EXTENSION_MSG.load(deps.storage)?;
-            let mint_msg = WasmMsg::Execute {
-                contract_addr: cw721.to_string(),
-                msg: to_json_binary(&cw721_base::msg::ExecuteMsg::<
-                    DefaultOptionalNftExtensionMsg,
-                    DefaultOptionalCollectionExtensionMsg,
-                    Empty,
-                >::Mint {
-                    token_id: token_id.to_string(),
-                    owner: info.sender.to_string(),
-                    token_uri: None,
-                    extension: Some(nft_extension_msg),
-                })?,
-                funds: vec![],
-            };
-            let sub_msg = SubMsg::reply_always(mint_msg, MINT_NFT_REPLY_ID);
-            Ok(response
-                .add_attribute("method", "execute_mint")
-                .add_submessage(sub_msg))
-        }
+        ExecuteMsg::Mint {} => execute_mint(deps, info),
+        ExecuteMsg::ReceiveNft(msg) => execute_receive_nft(deps, env, msg),
     }
+}
+
+fn execute_mint(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
+    let cw721 = ADDR_CW721.load(deps.storage)?;
+    let token_id = SUPPLY.load(deps.storage)?;
+    let nft_extension_msg = NFT_EXTENSION_MSG.load(deps.storage)?;
+    let mint_msg = WasmMsg::Execute {
+        contract_addr: cw721.to_string(),
+        msg: to_json_binary(&cw721_base::msg::ExecuteMsg::<
+            DefaultOptionalNftExtensionMsg,
+            DefaultOptionalCollectionExtensionMsg,
+            Empty,
+        >::Mint {
+            token_id: token_id.to_string(),
+            owner: info.sender.to_string(),
+            token_uri: None,
+            extension: Some(nft_extension_msg),
+        })?,
+        funds: vec![],
+    };
+    let sub_msg = SubMsg::reply_always(mint_msg, MINT_NFT_REPLY_ID);
+    Ok(Response::default()
+        .add_attribute("method", "execute_mint")
+        .add_submessage(sub_msg))
+}
+
+fn execute_receive_nft(
+    deps: DepsMut,
+    _env: Env,
+    msg: Cw721ReceiveMsg,
+) -> Result<Response, ContractError> {
+    let ics721 = ADDR_ICS721.load(deps.storage)?;
+    // query whether there is an outgoing proxy defined by ics721
+    let outgoing_proxy_or_ics721 = match deps
+        .querier
+        .query_wasm_smart(ics721.clone(), &ics721::msg::QueryMsg::OutgoingProxy {})?
+    {
+        Some(outgoing_proxy) => outgoing_proxy,
+        None => ics721,
+    };
+    let ibc_msg: IbcOutgoingMsg = from_json(&msg.msg)?;
+    // send nft to ics721 or outgoing proxy
+    let cw721 = ADDR_CW721.load(deps.storage)?;
+    let send_msg = WasmMsg::Execute {
+        contract_addr: cw721.to_string(),
+        msg: to_json_binary(&cw721_base::msg::ExecuteMsg::<
+            DefaultOptionalNftExtensionMsg,
+            DefaultOptionalCollectionExtensionMsg,
+            Empty,
+        >::SendNft {
+            contract: outgoing_proxy_or_ics721.to_string(),
+            token_id: msg.token_id,
+            msg: msg.msg,
+        })?,
+        funds: vec![],
+    };
+    Ok(Response::default()
+        .add_message(send_msg)
+        .add_attribute("method", "execute_receive_nft")
+        .add_attribute("receiver", ibc_msg.receiver.clone())
+        .add_attribute("channel_id", ibc_msg.channel_id.clone()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

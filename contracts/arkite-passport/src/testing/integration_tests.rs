@@ -1,12 +1,12 @@
 use anyhow::Result;
 use cosmwasm_std::{
     instantiate2_address, to_json_binary, Addr, Api, CanonicalAddr, DepsMut, Empty, Env, GovMsg,
-    MemoryStorage, Reply, Response, Storage,
+    IbcTimeout, MemoryStorage, Reply, Response, Storage, Timestamp,
 };
 use cw721_base::{
     msg::{AllNftInfoResponse, InstantiateMsg as Cw721InstantiateMsg, NftExtensionMsg},
     DefaultOptionalCollectionExtension, DefaultOptionalCollectionExtensionMsg,
-    DefaultOptionalNftExtension, NftExtension, Ownership,
+    DefaultOptionalNftExtension, DefaultOptionalNftExtensionMsg, NftExtension, Ownership,
 };
 use cw_cii::{Admin, ContractInstantiateInfo};
 use cw_multi_test::{
@@ -15,6 +15,7 @@ use cw_multi_test::{
     StakeKeeper, StargateFailing, WasmKeeper,
 };
 use ics721::ContractError;
+use ics721_types::ibc_types::IbcOutgoingMsg;
 use sha2::{digest::Update, Digest, Sha256};
 
 use crate::{
@@ -190,7 +191,7 @@ impl Test {
                 creator.clone(),
                 &cw_ics721_outgoing_proxy_rate_limit::msg::InstantiateMsg {
                     rate_limit: cw_ics721_outgoing_proxy_rate_limit::Rate::PerBlock(10),
-                    origin: None,
+                    origin: Some(addr_ics721_contract.to_string()),
                 },
                 &[],
                 "cw721-base",
@@ -204,7 +205,7 @@ impl Test {
                 code_id_incoming_proxy,
                 creator.clone(),
                 &cw_ics721_incoming_proxy_base::msg::InstantiateMsg {
-                    origin: None,
+                    origin: Some(addr_ics721_contract.to_string()),
                     channels: Some(vec![WHITELISTED_CHANNEL.to_string()]),
                 },
                 &[],
@@ -334,11 +335,40 @@ impl Test {
             .unwrap()
     }
 
-    fn execute_cw721_mint(&mut self) -> Result<AppResponse, anyhow::Error> {
+    fn execute_passport_mint(&mut self) -> Result<AppResponse, anyhow::Error> {
         self.app.execute_contract(
             self.nft_owner.clone(),
             self.addr_arkite_contract.clone(),
             &ExecuteMsg::Mint {},
+            &[],
+        )
+    }
+
+    fn execute_cw721_send_nft(
+        &mut self,
+        token_id: String,
+        receiver: String,
+        channel_id: String,
+    ) -> Result<AppResponse, anyhow::Error> {
+        let ibc_outgoing_msg = IbcOutgoingMsg {
+            receiver,
+            channel_id,
+            timeout: IbcTimeout::with_timestamp(Timestamp::from_seconds(0)),
+            memo: None,
+        };
+
+        self.app.execute_contract(
+            self.nft_owner.clone(),
+            self.addr_cw721_contract.clone(),
+            &cw721_base::msg::ExecuteMsg::<
+                DefaultOptionalNftExtensionMsg,
+                DefaultOptionalCollectionExtensionMsg,
+                Empty,
+            >::SendNft {
+                contract: self.addr_arkite_contract.to_string(),
+                token_id,
+                msg: to_json_binary(&ibc_outgoing_msg).unwrap(),
+            },
             &[],
         )
     }
@@ -389,7 +419,8 @@ fn outgoing_proxy_contract() -> Box<dyn Contract<Empty>> {
         cw_ics721_outgoing_proxy_rate_limit::contract::execute,
         cw_ics721_outgoing_proxy_rate_limit::contract::instantiate,
         cw_ics721_outgoing_proxy_rate_limit::contract::query,
-    );
+    )
+    .with_reply(cw_ics721_outgoing_proxy_rate_limit::contract::reply);
     Box::new(contract)
 }
 
@@ -421,7 +452,7 @@ fn test_instantiate() {
 fn test_mint() {
     let mut test = Test::new();
 
-    test.execute_cw721_mint().unwrap();
+    test.execute_passport_mint().unwrap();
 
     // assert results
     let supply = test.query_supply();
@@ -443,4 +474,23 @@ fn test_mint() {
             youtube_url: None,
         })
     );
+}
+
+#[test]
+fn test_send_nft() {
+    let mut test = Test::new();
+
+    // mint and send nft
+    test.execute_passport_mint().unwrap();
+    test.execute_cw721_send_nft(
+        "0".to_string(),
+        "receiver".to_string(),
+        WHITELISTED_CHANNEL.to_string(),
+    )
+    .unwrap();
+
+    // assert results
+    // - nft owned by ics721
+    let all_nft_info = test.query_cw721_all_nft_info("0".to_string());
+    assert_eq!(all_nft_info.access.owner, test.addr_ics721_contract);
 }

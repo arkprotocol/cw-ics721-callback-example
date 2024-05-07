@@ -1,6 +1,6 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Addr;
-use cw721_base::msg::NftExtensionMsg;
+use cw721_base::{msg::NftExtensionMsg, receiver::Cw721ReceiveMsg};
 use cw_cii::ContractInstantiateInfo;
 
 #[cw_serde]
@@ -13,6 +13,7 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub enum ExecuteMsg {
     Mint {},
+    ReceiveNft(Cw721ReceiveMsg),
 }
 
 #[cw_serde]

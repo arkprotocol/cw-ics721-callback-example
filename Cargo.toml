@@ -21,12 +21,13 @@ cw-storage-plus = "^1.1"
 cw2 = "^1.1"
 cw721 = { git = "https://github.com/arkprotocol/cw-nfts", branch = "collection-info"} # TODO switch to official repo (https://github.com/CosmWasm/cw-nfts) and version 0.19.0, once released
 cw721-base = { git = "https://github.com/arkprotocol/cw-nfts", branch = "collection-info"} # TODO switch to official repo (https://github.com/CosmWasm/cw-nfts) and version 0.19.0, once released
-ics721 = { git = "https://github.com/public-awesome/cw-ics721", tag = "v0.1.8"}
-ics721-base = { git = "https://github.com/public-awesome/cw-ics721", tag = "v0.1.8"}
+ics721 = { git = "https://github.com/arkprotocol/ark-cw-ics721", branch = "custom_collections"} # TODO switch to official repo (https://github.com/public-awesome/cw-ics721), once released
+ics721-types = { git = "https://github.com/arkprotocol/ark-cw-ics721", branch = "custom_collections"} # TODO switch to official repo (https://github.com/public-awesome/cw-ics721), once released
+ics721-base = { git = "https://github.com/arkprotocol/ark-cw-ics721", branch = "custom_collections"} # TODO switch to official repo (https://github.com/public-awesome/cw-ics721), once released
 cw-ics721-incoming-proxy = { git = "https://github.com/arkprotocol/cw-ics721-proxy.git", tag = "v0.1.0" }
 cw-ics721-incoming-proxy-base = { git = "https://github.com/arkprotocol/cw-ics721-proxy.git", tag = "v0.1.0" }
 cw-ics721-outgoing-proxy-rate-limit = { git = "https://github.com/arkprotocol/cw-ics721-proxy.git", tag = "v0.1.0" }
-cw-cii = { git = "https://github.com/public-awesome/cw-ics721", tag = "v0.1.8"}
+cw-cii = { git = "https://github.com/arkprotocol/ark-cw-ics721", branch = "custom_collections"} # TODO switch to official repo (https://github.com/public-awesome/cw-ics721), once released
 cw-multi-test = { version = "^0.20", features = ["cosmwasm_1_2"] }
 cw-rate-limiter = { git = "https://github.com/arkprotocol/cw-ics721-proxy.git", tag = "v0.1.1" }
 cw-utils = "0.13.4"

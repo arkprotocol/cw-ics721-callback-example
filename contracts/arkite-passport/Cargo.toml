@@ -9,6 +9,7 @@ cosmwasm-schema = { workspace = true }
 cosmwasm-storage = { workspace = true }
 cw-storage-plus = { workspace = true }
 ics721 = { workspace = true }
+ics721-types = { workspace = true }
 cw-cii = { workspace = true }
 cw-utils = { workspace = true }
 cw2 = { workspace = true }
