@@ -4,7 +4,10 @@ use cosmwasm_std::{
     IbcTimeout, MemoryStorage, Reply, Response, Storage, Timestamp,
 };
 use cw721_base::{
-    msg::{AllNftInfoResponse, InstantiateMsg as Cw721InstantiateMsg, NftExtensionMsg},
+    msg::{
+        AllNftInfoResponse, InstantiateMsg as Cw721InstantiateMsg, NftExtensionMsg,
+        NumTokensResponse,
+    },
     DefaultOptionalCollectionExtension, DefaultOptionalCollectionExtensionMsg,
     DefaultOptionalNftExtension, DefaultOptionalNftExtensionMsg, NftExtension, Ownership,
 };
@@ -14,22 +17,30 @@ use cw_multi_test::{
     ContractWrapper, DistributionKeeper, Executor, FailingModule, IbcAcceptingModule, Router,
     StakeKeeper, StargateFailing, WasmKeeper,
 };
-use ics721::ContractError;
-use ics721_types::ibc_types::IbcOutgoingMsg;
+use ics721::{ClassId, ContractError as Ics721ContractError, NonFungibleTokenPacketData, TokenId};
+use ics721_types::{
+    ibc_types::IbcOutgoingMsg,
+    types::{Ics721AckCallbackMsg, Ics721ReceiveCallbackMsg, Ics721Status},
+};
 use sha2::{digest::Update, Digest, Sha256};
 
 use crate::{
+    error::ContractError,
     execute,
-    msg::{ExecuteMsg, InstantiateMsg, QueryMsg},
+    msg::{CallbackMsg, ExecuteMsg, InstantiateMsg, QueryMsg},
 };
 
 use ics721::msg::{InstantiateMsg as Ics721InstantiateMsg, MigrateMsg as Ics721MigrateMsg};
 
 const ARKITE_WALLET: &str = "arkite";
 const NFT_OWNER_WALLET: &str = "nft_owner";
+const OTHER_CHAIN_WALLET: &str = "other_chain";
 const BECH32_PREFIX_HRP: &str = "ark";
 const WHITELISTED_CHANNEL: &str = "channel";
 const COUNTERPARTY_CONTRACT: &str = "counterparty_contract";
+const DEFAULT_TOKEN_URI: &str = "ipfs://interchain.passport";
+const ESCROWED_TOKEN_URI: &str = "ipfs://interchain.escrowed";
+const TRANSFERRED_TOKEN_URI: &str = "ipfs://interchain.transferred";
 
 type MockRouter = Router<
     BankKeeper,
@@ -137,7 +148,9 @@ impl Test {
                 code_id_arkite_passport,
                 creator.clone(),
                 &InstantiateMsg {
-                    nft_extension: Test::default_nft_extension_msg(),
+                    default_token_uri: DEFAULT_TOKEN_URI.to_string(),
+                    escrowed_token_uri: ESCROWED_TOKEN_URI.to_string(),
+                    transferred_token_uri: TRANSFERRED_TOKEN_URI.to_string(),
                     cw721_poap: ContractInstantiateInfo {
                         admin: Some(Admin::Instantiator {}),
                         msg: to_json_binary(&Cw721InstantiateMsg::<
@@ -146,8 +159,8 @@ impl Test {
                             name: "poap".to_string(),
                             symbol: "poap".to_string(),
                             collection_info_extension: None,
-                            minter: None,
-                            creator: Some(creator.to_string()),
+                            minter: None,  // none = sender/arkite is minter
+                            creator: None, // none = sender/arkite is creator
                             withdraw_address: None,
                         })
                         .unwrap(),
@@ -162,8 +175,8 @@ impl Test {
                             name: "name".to_string(),
                             symbol: "symbol".to_string(),
                             collection_info_extension: None,
-                            minter: None,
-                            creator: Some(creator.to_string()),
+                            minter: None,  // none = sender/arkite is minter
+                            creator: None, // none = sender/arkite is creator
                             withdraw_address: None,
                         })
                         .unwrap(),
@@ -265,38 +278,37 @@ impl Test {
             addr_outgoing_proxy_contract,
             addr_incoming_proxy_contract,
         };
-        test.execute_passport_counter_party_contract(COUNTERPARTY_CONTRACT.to_string())
+        test.execute_counter_party_contract(COUNTERPARTY_CONTRACT.to_string())
             .unwrap();
         test
     }
 
-    fn default_nft_extension_msg() -> NftExtensionMsg {
-        NftExtensionMsg {
-            image: Some(Some("ipfs://interchain.passport".to_string())),
-            image_data: None,
-            external_url: None,
-            description: None,
-            name: None,
-            attributes: None,
-            background_color: None,
-            animation_url: None,
-            youtube_url: None,
-        }
-    }
-
-    fn query_supply(&mut self) -> u64 {
-        self.app
-            .wrap()
-            .query_wasm_smart(self.addr_arkite_contract.clone(), &QueryMsg::Supply {})
-            .unwrap()
-    }
-
-    fn query_nft_extension_msg(&mut self) -> NftExtensionMsg {
+    fn query_default_token_uri(&mut self) -> String {
         self.app
             .wrap()
             .query_wasm_smart(
                 self.addr_arkite_contract.clone(),
-                &QueryMsg::NftExtensionMsg {},
+                &QueryMsg::DefaultTokenUri {},
+            )
+            .unwrap()
+    }
+
+    fn query_escrowed_token_uri(&mut self) -> String {
+        self.app
+            .wrap()
+            .query_wasm_smart(
+                self.addr_arkite_contract.clone(),
+                &QueryMsg::EscrowedTokenUri {},
+            )
+            .unwrap()
+    }
+
+    fn query_transferred_token_uri(&mut self) -> String {
+        self.app
+            .wrap()
+            .query_wasm_smart(
+                self.addr_arkite_contract.clone(),
+                &QueryMsg::TransferredTokenUri {},
             )
             .unwrap()
     }
@@ -332,6 +344,20 @@ impl Test {
             .unwrap()
     }
 
+    fn query_cw721_num_tokens(&mut self, cw721: Addr) -> NumTokensResponse {
+        self.app
+            .wrap()
+            .query_wasm_smart(
+                cw721,
+                &cw721_base::msg::QueryMsg::<
+                    DefaultOptionalNftExtension,
+                    DefaultOptionalCollectionExtension,
+                    Empty,
+                >::NumTokens {},
+            )
+            .unwrap()
+    }
+
     fn query_cw721_minter_ownership(&mut self) -> Ownership<Addr> {
         self.app
             .wrap()
@@ -362,12 +388,13 @@ impl Test {
 
     fn query_cw721_all_nft_info(
         &mut self,
+        cw721: Addr,
         token_id: String,
     ) -> AllNftInfoResponse<DefaultOptionalNftExtension> {
         self.app
             .wrap()
             .query_wasm_smart(
-                self.addr_cw721_contract.clone(),
+                cw721,
                 &cw721_base::msg::QueryMsg::<
                     DefaultOptionalNftExtension,
                     DefaultOptionalCollectionExtension,
@@ -389,7 +416,7 @@ impl Test {
         )
     }
 
-    fn execute_passport_counter_party_contract(
+    fn execute_counter_party_contract(
         &mut self,
         addr: String,
     ) -> Result<AppResponse, anyhow::Error> {
@@ -397,6 +424,68 @@ impl Test {
             self.creator.clone(),
             self.addr_arkite_contract.clone(),
             &ExecuteMsg::CounterPartyContract { addr },
+            &[],
+        )
+    }
+
+    fn execute_ack_callback(
+        &mut self,
+        ics721: Addr,
+        status: Ics721Status,
+        msg: CallbackMsg,
+        token_id: String,
+        receiver: String,
+        sender: String,
+    ) -> Result<AppResponse, anyhow::Error> {
+        self.app.execute_contract(
+            ics721,
+            self.addr_arkite_contract.clone(),
+            &ExecuteMsg::Ics721AckCallback(Ics721AckCallbackMsg {
+                status,
+                nft_contract: self.addr_cw721_contract.to_string(),
+                msg: to_json_binary(&msg).unwrap(),
+                original_packet: NonFungibleTokenPacketData {
+                    class_id: ClassId::new("some/class/id"),
+                    token_ids: vec![TokenId::new(token_id)],
+                    receiver,
+                    sender,
+                    class_data: None,
+                    class_uri: None,
+                    memo: None,
+                    token_data: None,
+                    token_uris: None,
+                },
+            }),
+            &[],
+        )
+    }
+
+    fn execute_receive_callback(
+        &mut self,
+        ics721: Addr,
+        msg: CallbackMsg,
+        token_id: String,
+        receiver: String,
+        sender: String,
+    ) -> Result<AppResponse, anyhow::Error> {
+        self.app.execute_contract(
+            ics721,
+            self.addr_arkite_contract.clone(),
+            &ExecuteMsg::Ics721ReceiveCallback(Ics721ReceiveCallbackMsg {
+                msg: to_json_binary(&msg).unwrap(),
+                nft_contract: self.addr_cw721_contract.to_string(), // pretend this is the escrowed cw721 contract
+                original_packet: NonFungibleTokenPacketData {
+                    class_id: ClassId::new("some/class/id"),
+                    token_ids: vec![TokenId::new(token_id)],
+                    receiver,
+                    sender,
+                    class_data: None,
+                    class_uri: None,
+                    memo: None,
+                    token_data: None,
+                    token_uris: None,
+                },
+            }),
             &[],
         )
     }
@@ -448,7 +537,7 @@ fn cw721_base_contract() -> Box<dyn Contract<Empty>> {
 
 fn ics721_contract() -> Box<dyn Contract<Empty>> {
     // need to wrap method in function for testing
-    fn ibc_reply(deps: DepsMut, env: Env, reply: Reply) -> Result<Response, ContractError> {
+    fn ibc_reply(deps: DepsMut, env: Env, reply: Reply) -> Result<Response, Ics721ContractError> {
         ics721_base::reply(deps, env, reply)
     }
 
@@ -492,10 +581,16 @@ fn test_instantiate() {
     assert_eq!(cw721, test.addr_cw721_contract);
     let ics721 = test.query_ics721();
     assert_eq!(ics721, test.addr_ics721_contract);
-    let supply = test.query_supply();
+    let supply = test
+        .query_cw721_num_tokens(test.addr_cw721_contract.clone())
+        .count;
     assert_eq!(supply, 0);
-    let nft_extension_msg = test.query_nft_extension_msg();
-    assert_eq!(nft_extension_msg, Test::default_nft_extension_msg());
+    let default_token_uri = test.query_default_token_uri();
+    assert_eq!(default_token_uri, DEFAULT_TOKEN_URI.to_string());
+    let escrowed_token_uri = test.query_escrowed_token_uri();
+    assert_eq!(escrowed_token_uri, ESCROWED_TOKEN_URI.to_string());
+    let transferred_token_uri = test.query_transferred_token_uri();
+    assert_eq!(transferred_token_uri, TRANSFERRED_TOKEN_URI.to_string());
 
     // cw721: check minter is arkite contract and creator is arkite wallet
     let minter_owner_ship = test.query_cw721_minter_ownership();
@@ -504,7 +599,10 @@ fn test_instantiate() {
         Some(test.addr_arkite_contract.clone())
     );
     let creator_owner_ship = test.query_cw721_creator_ownership();
-    assert_eq!(creator_owner_ship.owner, Some(test.creator.clone()));
+    assert_eq!(
+        creator_owner_ship.owner,
+        Some(test.addr_arkite_contract.clone())
+    );
 }
 
 #[test]
@@ -512,7 +610,7 @@ fn test_execute_counter_party_contract() {
     let mut test = Test::new();
 
     // mint and send nft
-    test.execute_passport_counter_party_contract(COUNTERPARTY_CONTRACT.to_string())
+    test.execute_counter_party_contract(COUNTERPARTY_CONTRACT.to_string())
         .unwrap();
 
     // assert results
@@ -528,24 +626,17 @@ fn test_mint() {
     test.execute_passport_mint().unwrap();
 
     // assert results
-    let supply = test.query_supply();
+    let supply = test
+        .query_cw721_num_tokens(test.addr_cw721_contract.clone())
+        .count;
     assert_eq!(supply, 1);
 
-    let all_nft_info = test.query_cw721_all_nft_info("0".to_string());
+    let all_nft_info =
+        test.query_cw721_all_nft_info(test.addr_cw721_contract.clone(), "0".to_string());
     assert_eq!(all_nft_info.access.owner, test.nft_owner);
     assert_eq!(
-        all_nft_info.info.extension,
-        Some(NftExtension {
-            image: Some("ipfs://interchain.passport".to_string()),
-            image_data: None,
-            external_url: None,
-            description: None,
-            name: None,
-            attributes: None,
-            background_color: None,
-            animation_url: None,
-            youtube_url: None,
-        })
+        all_nft_info.info.token_uri,
+        Some(DEFAULT_TOKEN_URI.to_string())
     );
 }
 
@@ -564,6 +655,166 @@ fn test_send_nft() {
 
     // assert results
     // - nft owned by ics721
-    let all_nft_info = test.query_cw721_all_nft_info("0".to_string());
+    let all_nft_info =
+        test.query_cw721_all_nft_info(test.addr_cw721_contract.clone(), "0".to_string());
     assert_eq!(all_nft_info.access.owner, test.addr_ics721_contract);
+}
+
+#[test]
+fn test_receive_callback() {
+    let owner_wallet = Addr::unchecked(NFT_OWNER_WALLET);
+    let other_chain_wallet = Addr::unchecked(OTHER_CHAIN_WALLET);
+    // assert unauthorized
+    {
+        let mut test = Test::new();
+        // process unauhtorized receive
+        let err: ContractError = test
+            .execute_receive_callback(
+                test.addr_cw721_contract.clone(), // unauthorized
+                CallbackMsg {
+                    sender: other_chain_wallet.to_string(),
+                    token_id: "1".to_string(),
+                },
+                "1".to_string(),
+                owner_wallet.to_string(),
+                other_chain_wallet.to_string(),
+            )
+            .unwrap_err()
+            .downcast()
+            .unwrap();
+        assert_eq!(err, ContractError::UnauthorizedCallback {});
+    }
+    // assert receive ok
+    {
+        let mut test = Test::new();
+        // pretend nft has been transferred
+        test.execute_passport_mint().unwrap();
+        // assert nft info and token uri
+        let all_nft_info =
+            test.query_cw721_all_nft_info(test.addr_cw721_contract.clone(), "0".to_string());
+        assert_eq!(all_nft_info.access.owner, test.nft_owner);
+        assert_eq!(
+            all_nft_info.info.token_uri,
+            Some(DEFAULT_TOKEN_URI.to_string())
+        );
+        // assert no poaps yet minted
+        let supply = test
+            .query_cw721_num_tokens(test.addr_poap_contract.clone())
+            .count;
+        assert_eq!(supply, 0);
+
+        // process receive
+        test.execute_receive_callback(
+            test.addr_ics721_contract.clone(),
+            CallbackMsg {
+                sender: other_chain_wallet.to_string(),
+                token_id: "0".to_string(),
+            },
+            "0".to_string(),
+            owner_wallet.to_string(),
+            other_chain_wallet.to_string(),
+        )
+        .unwrap();
+        // assert token uri has changed
+        let all_nft_info =
+            test.query_cw721_all_nft_info(test.addr_cw721_contract.clone(), "0".to_string());
+        assert_eq!(all_nft_info.access.owner, test.nft_owner);
+        assert_eq!(
+            all_nft_info.info.token_uri,
+            Some(ESCROWED_TOKEN_URI.to_string())
+        );
+        // assert one poap minted
+        let supply = test
+            .query_cw721_num_tokens(test.addr_poap_contract.clone())
+            .count;
+        assert_eq!(supply, 1);
+
+        // process receive again for testing back transfer
+        test.execute_receive_callback(
+            test.addr_ics721_contract.clone(),
+            CallbackMsg {
+                sender: other_chain_wallet.to_string(),
+                token_id: "0".to_string(),
+            },
+            "0".to_string(),
+            owner_wallet.to_string(),
+            other_chain_wallet.to_string(),
+        )
+        .unwrap();
+        // assert token uri has changed
+        let all_nft_info =
+            test.query_cw721_all_nft_info(test.addr_cw721_contract.clone(), "0".to_string());
+        assert_eq!(all_nft_info.access.owner, test.nft_owner);
+        assert_eq!(
+            all_nft_info.info.token_uri,
+            Some(DEFAULT_TOKEN_URI.to_string())
+        );
+        // assert one poap minted
+        let supply = test
+            .query_cw721_num_tokens(test.addr_poap_contract.clone())
+            .count;
+        assert_eq!(supply, 2);
+    }
+}
+
+#[test]
+fn test_ack_callback() {
+    let owner_wallet = Addr::unchecked(NFT_OWNER_WALLET);
+    // assert unauthorized
+    {
+        let mut test = Test::new();
+        // process unauhtorized ack
+        let err: ContractError = test
+            .execute_ack_callback(
+                test.addr_cw721_contract.clone(), // unauthorized
+                Ics721Status::Success,
+                CallbackMsg {
+                    sender: owner_wallet.to_string(),
+                    token_id: "1".to_string(),
+                },
+                "1".to_string(),
+                owner_wallet.to_string(),
+                owner_wallet.to_string(),
+            )
+            .unwrap_err()
+            .downcast()
+            .unwrap();
+        assert_eq!(err, ContractError::UnauthorizedCallback {});
+    }
+    // assert ack success
+    {
+        let mut test = Test::new();
+
+        // process ack
+        test.execute_ack_callback(
+            test.addr_ics721_contract.clone(),
+            Ics721Status::Success,
+            CallbackMsg {
+                sender: owner_wallet.to_string(),
+                token_id: "1".to_string(),
+            },
+            "1".to_string(),
+            owner_wallet.to_string(),
+            owner_wallet.to_string(),
+        )
+        .unwrap();
+    }
+    // assert ack fail
+    {
+        let mut test = Test::new();
+
+        // process ack
+        test.execute_ack_callback(
+            test.addr_ics721_contract.clone(),
+            Ics721Status::Failed("some reason".to_string()),
+            CallbackMsg {
+                sender: owner_wallet.to_string(),
+                token_id: "1".to_string(),
+            },
+            "1".to_string(),
+            owner_wallet.to_string(),
+            owner_wallet.to_string(),
+        )
+        .unwrap();
+    }
 }

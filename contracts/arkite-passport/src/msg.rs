@@ -1,11 +1,14 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Addr;
-use cw721_base::{msg::NftExtensionMsg, receiver::Cw721ReceiveMsg};
+use cw721_base::receiver::Cw721ReceiveMsg;
 use cw_cii::ContractInstantiateInfo;
+use ics721_types::types::{Ics721AckCallbackMsg, Ics721ReceiveCallbackMsg};
 
 #[cw_serde]
 pub struct InstantiateMsg {
-    pub nft_extension: NftExtensionMsg,
+    pub default_token_uri: String,
+    pub escrowed_token_uri: String,
+    pub transferred_token_uri: String,
     pub cw721_base: ContractInstantiateInfo,
     pub ics721_base: ContractInstantiateInfo,
     pub cw721_poap: ContractInstantiateInfo,
@@ -15,22 +18,30 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     Mint {},
     ReceiveNft(Cw721ReceiveMsg),
-    CounterPartyContract { addr: String },
+    CounterPartyContract {
+        addr: String,
+    },
+    /// Ack callback on source chain
+    Ics721AckCallback(Ics721AckCallbackMsg),
+    /// Receive callback on target chain, NOTE: if this fails, the transfer will fail and NFT is reverted back to the sender
+    Ics721ReceiveCallback(Ics721ReceiveCallbackMsg),
 }
 
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
-    #[returns(u64)]
-    Supply {},
     #[returns(Addr)]
     Poap {},
     #[returns(Addr)]
     CW721 {},
     #[returns(Addr)]
     ICS721 {},
-    #[returns(NftExtensionMsg)]
-    NftExtensionMsg {},
+    #[returns(String)]
+    DefaultTokenUri {},
+    #[returns(String)]
+    EscrowedTokenUri {},
+    #[returns(String)]
+    TransferredTokenUri {},
     #[returns(String)]
     CounterPartyContract {},
 }

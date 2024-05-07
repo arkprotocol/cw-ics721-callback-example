@@ -13,6 +13,9 @@ pub enum ContractError {
     #[error("unrecognised reply ID")]
     UnrecognisedReplyId {},
 
-    #[error("Failed to ming NFt: {error} with token_id: {token_id}")]
-    MintFailed { error: String, token_id: u64 },
+    #[error("Failed to ming NFt: {error}")]
+    MintFailed { error: String },
+
+    #[error("Unauthorized callback. Only ICS721 can call back.")]
+    UnauthorizedCallback {},
 }
