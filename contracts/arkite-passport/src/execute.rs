@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     from_json, to_json_binary, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Reply, Response,
-    StdResult, SubMsg, SubMsgResult, WasmMsg,
+    StdResult, Storage, SubMsg, SubMsgResult, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw721_base::{
@@ -10,13 +10,17 @@ use cw721_base::{
     DefaultOptionalNftExtensionMsg,
 };
 use cw_utils::parse_reply_instantiate_data;
-use ics721_types::ibc_types::IbcOutgoingMsg;
+use ics721_types::{
+    ibc_types::IbcOutgoingMsg,
+    types::{Ics721Callbacks, Ics721Memo},
+};
 
 use crate::{
     error::ContractError,
-    msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg},
-    state::{ADDR_CW721, ADDR_ICS721, NFT_EXTENSION_MSG, SUPPLY},
-    INSTANTIATE_CW721_REPLY_ID, INSTANTIATE_ICS721_REPLY_ID, MINT_NFT_REPLY_ID,
+    msg::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg},
+    state::{ADDR_CW721, ADDR_ICS721, ADDR_POAP, COUNTERPARTY_CONTRACT, NFT_EXTENSION_MSG, SUPPLY},
+    INSTANTIATE_CW721_REPLY_ID, INSTANTIATE_ICS721_REPLY_ID, INSTANTIATE_POAP_REPLY_ID,
+    MINT_NFT_REPLY_ID,
 };
 
 const CONTRACT_NAME: &str = "crates.io:arkite-passport";
@@ -34,6 +38,10 @@ pub fn instantiate(
     sub_msgs.push(SubMsg::reply_on_success(
         msg.cw721_base.into_wasm_msg(env.clone().contract.address),
         INSTANTIATE_CW721_REPLY_ID,
+    ));
+    sub_msgs.push(SubMsg::reply_on_success(
+        msg.cw721_poap.into_wasm_msg(env.clone().contract.address),
+        INSTANTIATE_POAP_REPLY_ID,
     ));
     sub_msgs.push(SubMsg::reply_on_success(
         msg.ics721_base.into_wasm_msg(env.clone().contract.address),
@@ -56,7 +64,15 @@ pub fn execute(
     match msg {
         ExecuteMsg::Mint {} => execute_mint(deps, info),
         ExecuteMsg::ReceiveNft(msg) => execute_receive_nft(deps, env, msg),
+        ExecuteMsg::CounterPartyContract { addr } => execute_counterparty_contract(deps, addr),
     }
+}
+
+fn execute_counterparty_contract(deps: DepsMut, addr: String) -> Result<Response, ContractError> {
+    COUNTERPARTY_CONTRACT.save(deps.storage, &addr)?;
+    Ok(Response::default()
+        .add_attribute("method", "execute_counterparty_contract")
+        .add_attribute("counterparty_contract", addr))
 }
 
 fn execute_mint(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
@@ -85,7 +101,7 @@ fn execute_mint(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractEr
 
 fn execute_receive_nft(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     msg: Cw721ReceiveMsg,
 ) -> Result<Response, ContractError> {
     let ics721 = ADDR_ICS721.load(deps.storage)?;
@@ -97,8 +113,10 @@ fn execute_receive_nft(
         Some(outgoing_proxy) => outgoing_proxy,
         None => ics721,
     };
-    let ibc_msg: IbcOutgoingMsg = from_json(&msg.msg)?;
-    // send nft to ics721 or outgoing proxy
+    let mut ibc_msg: IbcOutgoingMsg = from_json(&msg.msg)?;
+    let memo = create_memo(deps.storage, env, msg.sender, msg.token_id.clone())?;
+    ibc_msg.memo = Some(Binary::to_base64(&to_json_binary(&memo)?));
+    // forward nft to ics721 or outgoing proxy
     let cw721 = ADDR_CW721.load(deps.storage)?;
     let send_msg = WasmMsg::Execute {
         contract_addr: cw721.to_string(),
@@ -109,7 +127,7 @@ fn execute_receive_nft(
         >::SendNft {
             contract: outgoing_proxy_or_ics721.to_string(),
             token_id: msg.token_id,
-            msg: msg.msg,
+            msg: to_json_binary(&ibc_msg)?,
         })?,
         funds: vec![],
     };
@@ -120,9 +138,35 @@ fn execute_receive_nft(
         .add_attribute("channel_id", ibc_msg.channel_id.clone()))
 }
 
+fn create_memo(
+    storage: &dyn Storage,
+    env: Env,
+    sender: String,
+    token_id: String,
+) -> Result<Ics721Memo, ContractError> {
+    let callback_msg = CallbackMsg { sender, token_id };
+    let mut callbacks = Ics721Callbacks {
+        ack_callback_data: Some(to_json_binary(&callback_msg)?),
+        ack_callback_addr: Some(env.contract.address.to_string()),
+        receive_callback_data: None,
+        receive_callback_addr: None,
+    };
+    if let Some(counterparty_contract) = COUNTERPARTY_CONTRACT.may_load(storage)? {
+        callbacks.receive_callback_data = Some(to_json_binary(&callback_msg)?);
+        callbacks.receive_callback_addr = Some(counterparty_contract); // here we need to set contract addr, since receiver is NFT receiver
+    }
+    Ok(Ics721Memo {
+        callbacks: Some(callbacks),
+    })
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
+        QueryMsg::CounterPartyContract {} => {
+            to_json_binary(&COUNTERPARTY_CONTRACT.load(deps.storage)?)
+        }
+        QueryMsg::Poap {} => to_json_binary(&ADDR_POAP.load(deps.storage)?),
         QueryMsg::CW721 {} => to_json_binary(&ADDR_CW721.load(deps.storage)?),
         QueryMsg::ICS721 {} => to_json_binary(&ADDR_ICS721.load(deps.storage)?),
         QueryMsg::NftExtensionMsg {} => to_json_binary(&NFT_EXTENSION_MSG.load(deps.storage)?),
@@ -141,6 +185,12 @@ pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, Contrac
         .add_attribute("method", "reply")
         .add_attribute("reply_id", reply.id.to_string());
     match reply.id {
+        INSTANTIATE_POAP_REPLY_ID => {
+            let res = parse_reply_instantiate_data(reply)?;
+            let poap = deps.api.addr_validate(&res.contract_address)?;
+            ADDR_POAP.save(deps.storage, &poap)?;
+            Ok(response.add_attribute("cw721", poap))
+        }
         INSTANTIATE_CW721_REPLY_ID => {
             let res = parse_reply_instantiate_data(reply)?;
             let cw721 = deps.api.addr_validate(&res.contract_address)?;

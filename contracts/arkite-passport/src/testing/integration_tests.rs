@@ -29,6 +29,7 @@ const ARKITE_WALLET: &str = "arkite";
 const NFT_OWNER_WALLET: &str = "nft_owner";
 const BECH32_PREFIX_HRP: &str = "ark";
 const WHITELISTED_CHANNEL: &str = "channel";
+const COUNTERPARTY_CONTRACT: &str = "counterparty_contract";
 
 type MockRouter = Router<
     BankKeeper,
@@ -107,6 +108,7 @@ struct Test {
     code_id_cw721: u64,
     code_id_ics721: u64,
     addr_arkite_contract: Addr,
+    addr_poap_contract: Addr,
     addr_cw721_contract: Addr,
     addr_ics721_contract: Addr,
     addr_outgoing_proxy_contract: Addr,
@@ -136,6 +138,22 @@ impl Test {
                 creator.clone(),
                 &InstantiateMsg {
                     nft_extension: Test::default_nft_extension_msg(),
+                    cw721_poap: ContractInstantiateInfo {
+                        admin: Some(Admin::Instantiator {}),
+                        msg: to_json_binary(&Cw721InstantiateMsg::<
+                            DefaultOptionalCollectionExtensionMsg,
+                        > {
+                            name: "poap".to_string(),
+                            symbol: "poap".to_string(),
+                            collection_info_extension: None,
+                            minter: None,
+                            creator: Some(creator.to_string()),
+                            withdraw_address: None,
+                        })
+                        .unwrap(),
+                        code_id: code_id_cw721,
+                        label: "arkite passport".to_string(),
+                    },
                     cw721_base: ContractInstantiateInfo {
                         admin: Some(Admin::Instantiator {}),
                         msg: to_json_binary(&Cw721InstantiateMsg::<
@@ -172,6 +190,11 @@ impl Test {
                 "cw721-base",
                 None,
             )
+            .unwrap();
+
+        let addr_poap_contract = app
+            .wrap()
+            .query_wasm_smart(addr_arkite_contract.clone(), &QueryMsg::Poap {})
             .unwrap();
 
         let addr_cw721_contract = app
@@ -228,18 +251,23 @@ impl Test {
         .unwrap();
 
         let nft_owner = app.api().addr_make(NFT_OWNER_WALLET);
-        Self {
+
+        let mut test = Self {
             app,
             creator,
             nft_owner,
             code_id_cw721,
             code_id_ics721,
             addr_arkite_contract,
+            addr_poap_contract,
             addr_cw721_contract,
             addr_ics721_contract,
             addr_outgoing_proxy_contract,
             addr_incoming_proxy_contract,
-        }
+        };
+        test.execute_passport_counter_party_contract(COUNTERPARTY_CONTRACT.to_string())
+            .unwrap();
+        test
     }
 
     fn default_nft_extension_msg() -> NftExtensionMsg {
@@ -273,6 +301,13 @@ impl Test {
             .unwrap()
     }
 
+    fn query_poap(&mut self) -> Addr {
+        self.app
+            .wrap()
+            .query_wasm_smart(self.addr_arkite_contract.clone(), &QueryMsg::Poap {})
+            .unwrap()
+    }
+
     fn query_cw721(&mut self) -> Addr {
         self.app
             .wrap()
@@ -284,6 +319,16 @@ impl Test {
         self.app
             .wrap()
             .query_wasm_smart(self.addr_arkite_contract.clone(), &QueryMsg::ICS721 {})
+            .unwrap()
+    }
+
+    fn query_counter_party_contract(&mut self) -> String {
+        self.app
+            .wrap()
+            .query_wasm_smart(
+                self.addr_arkite_contract.clone(),
+                &QueryMsg::CounterPartyContract {},
+            )
             .unwrap()
     }
 
@@ -340,6 +385,18 @@ impl Test {
             self.nft_owner.clone(),
             self.addr_arkite_contract.clone(),
             &ExecuteMsg::Mint {},
+            &[],
+        )
+    }
+
+    fn execute_passport_counter_party_contract(
+        &mut self,
+        addr: String,
+    ) -> Result<AppResponse, anyhow::Error> {
+        self.app.execute_contract(
+            self.creator.clone(),
+            self.addr_arkite_contract.clone(),
+            &ExecuteMsg::CounterPartyContract { addr },
             &[],
         )
     }
@@ -429,6 +486,8 @@ fn test_instantiate() {
     let mut test = Test::new();
 
     // check stores are properly initialized
+    let poap = test.query_poap();
+    assert_eq!(poap, test.addr_poap_contract);
     let cw721 = test.query_cw721();
     assert_eq!(cw721, test.addr_cw721_contract);
     let ics721 = test.query_ics721();
@@ -446,6 +505,20 @@ fn test_instantiate() {
     );
     let creator_owner_ship = test.query_cw721_creator_ownership();
     assert_eq!(creator_owner_ship.owner, Some(test.creator.clone()));
+}
+
+#[test]
+fn test_execute_counter_party_contract() {
+    let mut test = Test::new();
+
+    // mint and send nft
+    test.execute_passport_counter_party_contract(COUNTERPARTY_CONTRACT.to_string())
+        .unwrap();
+
+    // assert results
+    // - nft owned by ics721
+    let counter_party_contract = test.query_counter_party_contract();
+    assert_eq!(counter_party_contract, COUNTERPARTY_CONTRACT.to_string());
 }
 
 #[test]
