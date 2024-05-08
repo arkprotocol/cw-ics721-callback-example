@@ -1,6 +1,6 @@
 #!/bin/bash
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-# Description: Upload contracts
+# Description: instantiate arkite passport contract, which includes instantiation of cw721, poap, and ics721
 
 for ENV in "osmosis" "stargaze"; do
     echo "================================================================"

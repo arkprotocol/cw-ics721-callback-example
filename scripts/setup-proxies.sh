@@ -1,6 +1,6 @@
 #!/bin/bash
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-# Description: Upload contracts
+# Description: instantiate proxies and migrate ics721 with proxies
 
 for ENV in "osmosis" "stargaze"; do
     echo "================================================================"
