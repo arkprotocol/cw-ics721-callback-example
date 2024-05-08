@@ -1,0 +1,11 @@
+{
+    "default_token_uri": "ipfs://passport/default",
+    "escrowed_token_uri": "ipfs://passport/escrowed",
+    "transferred_token_uri": "ipfs://passport/transferred",
+    "cw721_base": {
+        "code_id": 8182,
+        "admin": "instantiator",
+        "label": "Arkite InterChain Passport collection",
+        "msg": "eyJuYW1lIjogIkFya2l0ZSBJbnRlckNoYWluIFBhc3Nwb3J0IGNvbGxlY3Rpb24iLCAic3ltYm9sIjogInBhc3Nwb3J0In0K"
+    }
+}

@@ -59,6 +59,7 @@ pub fn instantiate(
     TRANSFERRED_TOKEN_URI.save(deps.storage, &msg.transferred_token_uri)?;
     Ok(Response::default()
         .add_attribute("method", "instantiate")
+        .add_attribute("addr_arkite_passport", env.contract.address.to_string())
         .add_submessages(sub_msgs))
 }
 
@@ -318,19 +319,19 @@ pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, Contrac
             let res = parse_reply_instantiate_data(reply)?;
             let poap = deps.api.addr_validate(&res.contract_address)?;
             ADDR_POAP.save(deps.storage, &poap)?;
-            Ok(response.add_attribute("cw721", poap))
+            Ok(response.add_attribute("addr_poap", poap))
         }
         INSTANTIATE_CW721_REPLY_ID => {
             let res = parse_reply_instantiate_data(reply)?;
             let cw721 = deps.api.addr_validate(&res.contract_address)?;
             ADDR_CW721.save(deps.storage, &cw721)?;
-            Ok(response.add_attribute("cw721", cw721))
+            Ok(response.add_attribute("addr_cw721", cw721))
         }
         INSTANTIATE_ICS721_REPLY_ID => {
             let res = parse_reply_instantiate_data(reply)?;
             let ics721 = deps.api.addr_validate(&res.contract_address)?;
             ADDR_ICS721.save(deps.storage, &ics721)?;
-            Ok(response.add_attribute("ics721", ics721))
+            Ok(response.add_attribute("addr_ics721", ics721))
         }
         MINT_NFT_REPLY_ID => match reply.result {
             SubMsgResult::Ok(_) => Ok(response),
