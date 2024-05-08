@@ -1,5 +1,3 @@
-use std::default;
-
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
@@ -8,7 +6,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw721_base::{
-    msg::{AllNftInfoResponse, NftInfoResponse, NumTokensResponse},
+    msg::{AllNftInfoResponse, NumTokensResponse},
     receiver::Cw721ReceiveMsg,
     DefaultOptionalCollectionExtensionMsg, DefaultOptionalNftExtension,
     DefaultOptionalNftExtensionMsg,
@@ -203,10 +201,29 @@ fn execute_receive_callback(
 
     // ========= 1. change token uri
     let CallbackMsg { token_id, sender } = from_json(msg.msg)?;
+    let update_nft_info =
+        create_update_nft_info_msg(deps.as_ref(), msg.nft_contract, token_id.clone())?;
+    // ========= 2. mint poap
+    let poap = ADDR_POAP.load(deps.storage)?;
+    let mint_poap = create_mint_msg(deps, poap, msg.original_packet.receiver)?;
+
+    Ok(Response::default()
+        .add_message(update_nft_info)
+        .add_submessage(mint_poap)
+        .add_attribute("method", "execute_receive_callback")
+        .add_attribute("token_id", token_id)
+        .add_attribute("sender", sender))
+}
+
+fn create_update_nft_info_msg(
+    deps: Deps,
+    cw721: String,
+    token_id: String,
+) -> Result<WasmMsg, ContractError> {
     // - get nft info
     let all_nft_info: AllNftInfoResponse<DefaultOptionalNftExtension> =
         deps.querier.query_wasm_smart(
-            msg.nft_contract.clone(),
+            cw721.clone(),
             &cw721_base::msg::QueryMsg::<
                 DefaultOptionalNftExtensionMsg,
                 DefaultOptionalCollectionExtensionMsg,
@@ -216,6 +233,7 @@ fn execute_receive_callback(
                 include_expired: None,
             },
         )?;
+
     // check if token uri is escrowed
     let token_uri = all_nft_info.info.token_uri.unwrap(); // unwrap is safe here, since we set token_uri during mint
     let escrowed_token_uri = ESCROWED_TOKEN_URI.load(deps.storage)?;
@@ -226,7 +244,7 @@ fn execute_receive_callback(
     };
     // - set new token uri
     let update_nft_info: WasmMsg = WasmMsg::Execute {
-        contract_addr: msg.nft_contract,
+        contract_addr: cw721,
         msg: to_json_binary(&cw721_base::msg::ExecuteMsg::<
             DefaultOptionalNftExtensionMsg,
             DefaultOptionalCollectionExtensionMsg,
@@ -238,16 +256,7 @@ fn execute_receive_callback(
         })?,
         funds: vec![],
     };
-    // ========= 2. mint poap
-    let poap = ADDR_POAP.load(deps.storage)?;
-    let mint_poap = create_mint_msg(deps, poap, all_nft_info.access.owner)?;
-
-    Ok(Response::default()
-        .add_message(update_nft_info)
-        .add_submessage(mint_poap)
-        .add_attribute("method", "execute_receive_callback")
-        .add_attribute("token_id", token_id)
-        .add_attribute("sender", sender))
+    Ok(update_nft_info)
 }
 
 fn execute_ack_callback(
@@ -265,10 +274,14 @@ fn execute_ack_callback(
     let CallbackMsg { token_id, sender } = from_json(&msg.msg)?;
     let res = Response::default()
         .add_attribute("method", "execute_ack_callback")
-        .add_attribute("token_id", token_id)
+        .add_attribute("token_id", token_id.clone())
         .add_attribute("sender", sender);
     match msg.status {
-        Ics721Status::Success => Ok(res),
+        Ics721Status::Success => {
+            let update_nft_info =
+                create_update_nft_info_msg(deps.as_ref(), msg.nft_contract, token_id)?;
+            Ok(res.add_message(update_nft_info))
+        }
         Ics721Status::Failed(error) => Ok(res.add_attribute("error", error)),
     }
 }

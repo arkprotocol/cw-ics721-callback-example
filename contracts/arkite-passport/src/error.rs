@@ -13,7 +13,7 @@ pub enum ContractError {
     #[error("unrecognised reply ID")]
     UnrecognisedReplyId {},
 
-    #[error("Failed to ming NFt: {error}")]
+    #[error("Failed to mint NFT: {error}")]
     MintFailed { error: String },
 
     #[error("Unauthorized callback. Only ICS721 can call back.")]
