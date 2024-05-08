@@ -1,7 +1,6 @@
 pub mod error;
 pub mod execute;
 pub mod msg;
-pub mod query;
 pub mod state;
 
 pub(crate) const INSTANTIATE_CW721_REPLY_ID: u64 = 0;

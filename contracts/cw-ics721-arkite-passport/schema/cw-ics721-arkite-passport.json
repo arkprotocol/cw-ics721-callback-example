@@ -1,0 +1,534 @@
+{
+  "contract_name": "cw-ics721-arkite-passport",
+  "contract_version": "0.1.0",
+  "idl_version": "1.0.0",
+  "instantiate": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "InstantiateMsg",
+    "type": "object",
+    "required": [
+      "cw721_base",
+      "cw721_poap",
+      "default_token_uri",
+      "escrowed_token_uri",
+      "ics721_base",
+      "transferred_token_uri"
+    ],
+    "properties": {
+      "cw721_base": {
+        "$ref": "#/definitions/ContractInstantiateInfo"
+      },
+      "cw721_poap": {
+        "$ref": "#/definitions/ContractInstantiateInfo"
+      },
+      "default_token_uri": {
+        "type": "string"
+      },
+      "escrowed_token_uri": {
+        "type": "string"
+      },
+      "ics721_base": {
+        "$ref": "#/definitions/ContractInstantiateInfo"
+      },
+      "transferred_token_uri": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "definitions": {
+      "Admin": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "address"
+            ],
+            "properties": {
+              "address": {
+                "type": "object",
+                "required": [
+                  "addr"
+                ],
+                "properties": {
+                  "addr": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "instantiator"
+            ],
+            "properties": {
+              "instantiator": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Binary": {
+        "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.",
+        "type": "string"
+      },
+      "ContractInstantiateInfo": {
+        "type": "object",
+        "required": [
+          "code_id",
+          "label",
+          "msg"
+        ],
+        "properties": {
+          "admin": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Admin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "code_id": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "label": {
+            "type": "string"
+          },
+          "msg": {
+            "$ref": "#/definitions/Binary"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "execute": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ExecuteMsg",
+    "oneOf": [
+      {
+        "type": "object",
+        "required": [
+          "mint"
+        ],
+        "properties": {
+          "mint": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "receive_nft"
+        ],
+        "properties": {
+          "receive_nft": {
+            "$ref": "#/definitions/Cw721ReceiveMsg"
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "counter_party_contract"
+        ],
+        "properties": {
+          "counter_party_contract": {
+            "type": "object",
+            "required": [
+              "addr"
+            ],
+            "properties": {
+              "addr": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Ack callback on source chain",
+        "type": "object",
+        "required": [
+          "ics721_ack_callback"
+        ],
+        "properties": {
+          "ics721_ack_callback": {
+            "$ref": "#/definitions/Ics721AckCallbackMsg"
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Receive callback on target chain, NOTE: if this fails, the transfer will fail and NFT is reverted back to the sender",
+        "type": "object",
+        "required": [
+          "ics721_receive_callback"
+        ],
+        "properties": {
+          "ics721_receive_callback": {
+            "$ref": "#/definitions/Ics721ReceiveCallbackMsg"
+          }
+        },
+        "additionalProperties": false
+      }
+    ],
+    "definitions": {
+      "Binary": {
+        "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.",
+        "type": "string"
+      },
+      "ClassId": {
+        "description": "A class ID according to the ICS-721 spec. The newtype pattern is used here to provide some distinction between token and class IDs in the type system.",
+        "type": "string"
+      },
+      "Cw721ReceiveMsg": {
+        "description": "Cw721ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg",
+        "type": "object",
+        "required": [
+          "msg",
+          "sender",
+          "token_id"
+        ],
+        "properties": {
+          "msg": {
+            "$ref": "#/definitions/Binary"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "token_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Ics721AckCallbackMsg": {
+        "description": "A message to update your contract of the status of a transfer status = Ics721Status::Success - the transfer was successful and NFT is on the other chain status = Ics721Status::Failed - Transfer failed and contract still owns the NFT",
+        "type": "object",
+        "required": [
+          "msg",
+          "nft_contract",
+          "original_packet",
+          "status"
+        ],
+        "properties": {
+          "msg": {
+            "$ref": "#/definitions/Binary"
+          },
+          "nft_contract": {
+            "type": "string"
+          },
+          "original_packet": {
+            "$ref": "#/definitions/NonFungibleTokenPacketData"
+          },
+          "status": {
+            "$ref": "#/definitions/Ics721Status"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Ics721ReceiveCallbackMsg": {
+        "description": "A message is that is being called on receiving the NFT after transfer was completed. Receiving this message means that the NFT was successfully transferred. You must verify this message was called by an approved ICS721 contract, either by code_id or address.",
+        "type": "object",
+        "required": [
+          "msg",
+          "nft_contract",
+          "original_packet"
+        ],
+        "properties": {
+          "msg": {
+            "$ref": "#/definitions/Binary"
+          },
+          "nft_contract": {
+            "type": "string"
+          },
+          "original_packet": {
+            "$ref": "#/definitions/NonFungibleTokenPacketData"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Ics721Status": {
+        "description": "The status of a transfer on callback",
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "success"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "failed"
+            ],
+            "properties": {
+              "failed": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "NonFungibleTokenPacketData": {
+        "type": "object",
+        "required": [
+          "classId",
+          "receiver",
+          "sender",
+          "tokenIds"
+        ],
+        "properties": {
+          "classData": {
+            "description": "Optional base64 encoded field which contains on-chain metadata about the NFT class. Must be non-empty if provided.",
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Binary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "classId": {
+            "description": "Uniquely identifies the collection which the tokens being transfered belong to on the sending chain. Must be non-empty.",
+            "allOf": [
+              {
+                "$ref": "#/definitions/ClassId"
+              }
+            ]
+          },
+          "classUri": {
+            "description": "Optional URL that points to metadata about the collection. Must be non-empty if provided.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "memo": {
+            "description": "Memo to add custom string to the msg",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "receiver": {
+            "description": "The address that should receive the tokens on the receiving chain.",
+            "type": "string"
+          },
+          "sender": {
+            "description": "The address sending the tokens on the sending chain.",
+            "type": "string"
+          },
+          "tokenData": {
+            "description": "Optional base64 encoded metadata for the tokens being transfered. `tokenData[N]` should hold metadata for `tokenIds[N]` and both lists should have the same length if provided. Must be non-empty if provided.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/definitions/Binary"
+            }
+          },
+          "tokenIds": {
+            "description": "Uniquely identifies the tokens in the NFT collection being transfered. This MUST be non-empty.",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/TokenId"
+            }
+          },
+          "tokenUris": {
+            "description": "Optional URL that points to metadata for each token being transfered. `tokenUris[N]` should hold the metadata for `tokenIds[N]` and both lists should have the same if provided. Must be non-empty if provided.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "TokenId": {
+        "description": "A token ID according to the ICS-721 spec. The newtype pattern is used here to provide some distinction between token and class IDs in the type system.",
+        "type": "string"
+      }
+    }
+  },
+  "query": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "QueryMsg",
+    "oneOf": [
+      {
+        "type": "object",
+        "required": [
+          "poap"
+        ],
+        "properties": {
+          "poap": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "c_w721"
+        ],
+        "properties": {
+          "c_w721": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "i_c_s721"
+        ],
+        "properties": {
+          "i_c_s721": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "default_token_uri"
+        ],
+        "properties": {
+          "default_token_uri": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "escrowed_token_uri"
+        ],
+        "properties": {
+          "escrowed_token_uri": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "transferred_token_uri"
+        ],
+        "properties": {
+          "transferred_token_uri": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "counter_party_contract"
+        ],
+        "properties": {
+          "counter_party_contract": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    ]
+  },
+  "migrate": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "MigrateMsg",
+    "oneOf": [
+      {
+        "type": "object",
+        "required": [
+          "with_update"
+        ],
+        "properties": {
+          "with_update": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    ]
+  },
+  "sudo": null,
+  "responses": {
+    "c_w721": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Addr",
+      "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+      "type": "string"
+    },
+    "counter_party_contract": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "String",
+      "type": "string"
+    },
+    "default_token_uri": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "String",
+      "type": "string"
+    },
+    "escrowed_token_uri": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "String",
+      "type": "string"
+    },
+    "i_c_s721": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Addr",
+      "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+      "type": "string"
+    },
+    "poap": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Addr",
+      "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+      "type": "string"
+    },
+    "transferred_token_uri": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "String",
+      "type": "string"
+    }
+  }
+}

@@ -1,6 +1,6 @@
 #!/bin/bash
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-# Description: Uploads contracts
+# Description: Upload contracts
 
 for ENV in "stargaze" "osmosis"; do
     echo "================================================================"
@@ -10,7 +10,7 @@ for ENV in "stargaze" "osmosis"; do
         echo "================================================================"
         CONTRACT=$(basename $FILE .wasm)
         echo "============ Uploading $CONTRACT"
-        CMD="$CLI tx wasm store $FILE --from $WALLET_ARKITE --chain-id $CHAIN_ID --node $CHAIN_NODE --gas $CLI_GAS --gas-prices $CLI_GAS_PRICES --gas-adjustment $CLI_GAS_ADJUSTMENT --broadcast-mode $CLI_BROADCAST_MODE --yes"
+        CMD="$CLI tx wasm store $FILE --from $WALLET_ARKITE_PASSPORT --chain-id $CHAIN_ID --node $CHAIN_NODE --gas $CLI_GAS --gas-prices $CLI_GAS_PRICES --gas-adjustment $CLI_GAS_ADJUSTMENT --broadcast-mode $CLI_BROADCAST_MODE --yes"
         echo $CMD
         TX_HASH=$($CMD | jq -r ".txhash")
         ERROR_CODE=${PIPESTATUS[0]}
