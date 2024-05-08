@@ -2,44 +2,36 @@
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 # Description: Upload contracts
 
-# check user provided chain
-if [ -z "$1" ]; then
-    echo "Usage: $0 [stargaze|osmosis]"
+# check user provided chain and token_id
+if [[ -z "$1" || -z "$2" ]]; then
+    echo "Usage:"
+    echo "$0 [stargaze|osmosis] [token_id]"
+    echo "$0 [stargaze|osmosis] [token_id] [ADDR_CW721]"
     exit 1
 fi
+
+# set target chain
 SOURCE_CHAIN=$1
+if [ "$SOURCE_CHAIN" == "stargaze" ]; then
+    TARGET_CHAIN="osmosis"
+elif [ "$SOURCE_CHAIN" == "osmosis" ]; then
+    TARGET_CHAIN="stargaze"
+else
+    echo "Invalid chain: $SOURCE_CHAIN"
+    exit 1
+fi
+
 echo "reading $SCRIPT_DIR/$SOURCE_CHAIN.env"
 source $SCRIPT_DIR/$SOURCE_CHAIN.env
 
-# set target chain
-if [ "$SOURCE_CHAIN" == "stargaze" ]; then
-    TARGET_CHAIN="osmosis"
+TOKEN_ID=$2
+
+if [[ -z "$3" ]]; then
+    echo "using default cw721: $ADDR_CW721"
+    SOURCE_NFT_CONTRACT=$ADDR_CW721
 else
-    TARGET_CHAIN="stargaze"
+    SOURCE_NFT_CONTRACT=$3
 fi
-
-echo "============ Minting NFT"
-MSG="'{\"mint\": {}}'"
-CMD="$CLI tx wasm execute $ADDR_ARKITE_PASSPORT "$MSG" --from $WALLET_ARKITE_PASSPORT --gas $CLI_GAS --gas-prices $CLI_GAS_PRICES --gas-adjustment $CLI_GAS_ADJUSTMENT -b $CLI_BROADCAST_MODE --output $CLI_OUTPUT --yes --node $CHAIN_NODE --chain-id $CHAIN_ID"
-echo $CMD
-echo "executing cmd: $CMD" >&2
-OUTPUT=$(eval $CMD)
-EXIT_CODE=$?
-if [ $EXIT_CODE != 0 ]; then
-    exit "$EXIT_CODE"
-fi
-
-TX_HASH=$(echo $OUTPUT | jq -r ".txhash")
-echo "TX_HASH: $TX_HASH"
-sleep 10
-QUERY_OUTPUT=$($CLI q tx $TX_HASH --chain-id $CHAIN_ID --node $CHAIN_NODE --output json)
-
-TOKEN_ID=$(echo $QUERY_OUTPUT | jq '.events[] | select(.type == "wasm") | .attributes[] | select(.key =="token_id")' | jq -r '.value') &>/dev/null
-if [ -z "$TOKEN_ID" ]; then
-    echo "Failed to get TOKEN_ID from tx $TX_HASH"
-    exit 1
-fi
-echo "Minted NFT #$TOKEN_ID" >&2
 
 echo "============ Transferring NFT"
 # create ICS721 message with:
@@ -72,7 +64,7 @@ printf -v EXECUTE_MSG '{"send_nft": {
     "$MSG"
 
 # execute transfer
-CMD="$CLI tx wasm execute '$ADDR_CW721' '$EXECUTE_MSG' \
+CMD="$CLI tx wasm execute '$SOURCE_NFT_CONTRACT' '$EXECUTE_MSG' \
 --from "$WALLET_ARKITE_PASSPORT" \
 --gas-prices "$CLI_GAS_PRICES" \
 --gas "$CLI_GAS" \
@@ -94,19 +86,39 @@ sleep 10
 
 echo "============ relaying packets"
 CMD="hermes --config ./relayer/hermes/config.toml clear packets --chain $CHAIN_ID --channel $CHANNEL_ID --port wasm.$ADDR_ICS721"
+echo $CMD
 eval $CMD
 
 echo "============ checking NFTs"
-MSG="'{\"all_nft_info\":{\"token_id\": \"4\"}}'"
-CMD="$CLI query wasm contract-state smart $ADDR_CW721 $MSG --chain-id $CHAIN_ID --node $CHAIN_NODE --output $CLI_OUTPUT"
+# query source chain for NFT
+# - cw721 query for nft info
+MSG="'{\"all_nft_info\":{\"token_id\": \"$TOKEN_ID\"}}'"
+CMD="$CLI query wasm contract-state smart $SOURCE_NFT_CONTRACT $MSG --chain-id $CHAIN_ID --node $CHAIN_NODE --output $CLI_OUTPUT"
+echo $CMD
 OUTPUT=$(eval $CMD)
 SOURCE_TOKEN_URI=$(echo $OUTPUT | jq -r ".data.info.token_uri")
 SOURCE_OWNER=$(echo $OUTPUT | jq -r ".data.access.owner")
-echo "$SOURCE_CHAIN: NFT #$TOKEN_ID, token uri: $SOURCE_TOKEN_URI, owner: $SOURCE_OWNER (ics721: $ADDR_ICS721)"
+echo "------------------------------------------------------------"
+echo "$SOURCE_CHAIN"
+echo "- nft contract: $SOURCE_NFT_CONTRACT"
+echo "- NFT #$TOKEN_ID, token uri: $SOURCE_TOKEN_URI, owner: $SOURCE_OWNER (ics721: $ADDR_ICS721)"
+echo "------------------------------------------------------------"
 
+# query target chain for NFT
 source $SCRIPT_DIR/$TARGET_CHAIN.env
-CMD="$CLI query wasm contract-state smart $ADDR_CW721 $MSG --chain-id $CHAIN_ID --node $CHAIN_NODE --output $CLI_OUTPUT"
+# - ics721 query for nft contract
+QUERY_MSG="'{\"nft_contract\":{\"class_id\":\"wasm.$ADDR_ICS721/$CHANNEL_ID/$SOURCE_NFT_CONTRACT\"}}'"
+QUERY_CMD="$CLI query wasm contract-state smart $ADDR_ICS721 $QUERY_MSG --chain-id $CHAIN_ID --node $CHAIN_NODE --output $CLI_OUTPUT"
+QUERY_OUTPUT=$(eval $QUERY_CMD)
+TARGET_NFT_CONTRACT=$(echo $QUERY_OUTPUT | jq -r ".data")
+# - cw721 query for nft info
+CMD="$CLI query wasm contract-state smart $TARGET_NFT_CONTRACT $MSG --chain-id $CHAIN_ID --node $CHAIN_NODE --output $CLI_OUTPUT"
+echo $CMD
 OUTPUT=$(eval $CMD)
 TARGET_TOKEN_URI=$(echo $OUTPUT | jq -r ".data.info.token_uri")
 TARGET_OWNER=$(echo $OUTPUT | jq -r ".data.access.owner")
-echo "$TARGET_CHAIN: NFT #$TOKEN_ID, token uri: $TARGET_TOKEN_URI, owner: $TARGET_OWNER (ics721: $ADDR_ICS721)"
+echo "------------------------------------------------------------"
+echo "$TARGET_CHAIN"
+echo "- nft contract: $TARGET_NFT_CONTRACT"
+echo "- NFT #$TOKEN_ID, token uri: $TARGET_TOKEN_URI, owner: $TARGET_OWNER (ics721: $ADDR_ICS721)"
+echo "------------------------------------------------------------"

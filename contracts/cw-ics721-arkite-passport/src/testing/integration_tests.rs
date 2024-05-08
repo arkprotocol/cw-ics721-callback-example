@@ -423,6 +423,7 @@ impl Test {
     fn execute_ack_callback(
         &mut self,
         ics721: Addr,
+        class_id: ClassId,
         status: Ics721Status,
         msg: CallbackMsg,
         token_id: String,
@@ -437,7 +438,7 @@ impl Test {
                 nft_contract: self.addr_cw721_contract.to_string(),
                 msg: to_json_binary(&msg).unwrap(),
                 original_packet: NonFungibleTokenPacketData {
-                    class_id: ClassId::new("some/class/id"),
+                    class_id,
                     token_ids: vec![TokenId::new(token_id)],
                     receiver,
                     sender,
@@ -455,6 +456,7 @@ impl Test {
     fn execute_receive_callback(
         &mut self,
         ics721: Addr,
+        class_id: ClassId,
         msg: CallbackMsg,
         token_id: String,
         receiver: String,
@@ -467,7 +469,7 @@ impl Test {
                 msg: to_json_binary(&msg).unwrap(),
                 nft_contract: self.addr_cw721_contract.to_string(), // pretend this is the escrowed cw721 contract
                 original_packet: NonFungibleTokenPacketData {
-                    class_id: ClassId::new("some/class/id"),
+                    class_id,
                     token_ids: vec![TokenId::new(token_id)],
                     receiver,
                     sender,
@@ -661,6 +663,7 @@ fn test_receive_callback() {
         let err: ContractError = test
             .execute_receive_callback(
                 test.addr_cw721_contract.clone(), // unauthorized
+                ClassId::new("some/class/id"),
                 CallbackMsg {
                     sender: test.other_chain_wallet.to_string(),
                     token_id: "1".to_string(),
@@ -696,6 +699,7 @@ fn test_receive_callback() {
         // process receive
         test.execute_receive_callback(
             test.addr_ics721_contract.clone(),
+            ClassId::new("some/class/id"),
             CallbackMsg {
                 sender: test.other_chain_wallet.to_string(),
                 token_id: "0".to_string(),
@@ -711,7 +715,7 @@ fn test_receive_callback() {
         assert_eq!(all_nft_info.access.owner, test.nft_owner);
         assert_eq!(
             all_nft_info.info.token_uri,
-            Some(ESCROWED_TOKEN_URI.to_string())
+            Some(TRANSFERRED_TOKEN_URI.to_string())
         );
         // assert one poap minted
         let supply = test
@@ -722,6 +726,7 @@ fn test_receive_callback() {
         // process receive again for testing back transfer
         test.execute_receive_callback(
             test.addr_ics721_contract.clone(),
+            ClassId::new(test.addr_cw721_contract.to_string()),
             CallbackMsg {
                 sender: test.other_chain_wallet.to_string(),
                 token_id: "0".to_string(),
@@ -756,6 +761,7 @@ fn test_ack_callback() {
         let err: ContractError = test
             .execute_ack_callback(
                 test.addr_cw721_contract.clone(), // unauthorized
+                ClassId::new("some/class/id"),
                 Ics721Status::Success,
                 CallbackMsg {
                     sender: test.nft_owner.to_string(),
@@ -788,6 +794,7 @@ fn test_ack_callback() {
         // process ack
         test.execute_ack_callback(
             test.addr_ics721_contract.clone(),
+            ClassId::new("some/class/id"),
             Ics721Status::Success,
             CallbackMsg {
                 sender: test.nft_owner.to_string(),
@@ -810,6 +817,7 @@ fn test_ack_callback() {
         // process ack again
         test.execute_ack_callback(
             test.addr_ics721_contract.clone(),
+            ClassId::new(test.addr_cw721_contract.to_string()),
             Ics721Status::Success,
             CallbackMsg {
                 sender: test.nft_owner.to_string(),
@@ -836,6 +844,7 @@ fn test_ack_callback() {
         // process ack
         test.execute_ack_callback(
             test.addr_ics721_contract.clone(),
+            ClassId::new("some/class/id"),
             Ics721Status::Failed("some reason".to_string()),
             CallbackMsg {
                 sender: test.nft_owner.to_string(),

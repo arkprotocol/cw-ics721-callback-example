@@ -27,7 +27,7 @@ use crate::{
         ESCROWED_TOKEN_URI, TRANSFERRED_TOKEN_URI,
     },
     INSTANTIATE_CW721_REPLY_ID, INSTANTIATE_ICS721_REPLY_ID, INSTANTIATE_POAP_REPLY_ID,
-    MINT_NFT_REPLY_ID,
+    MINT_NFT_REPLY_ID, NOOP_REPLY_ID,
 };
 
 const CONTRACT_NAME: &str = "crates.io:arkite-passport";
@@ -72,7 +72,7 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::Mint {} => execute_mint(deps, info.sender.to_string()),
-        ExecuteMsg::ReceiveNft(msg) => execute_receive_nft(deps, env, msg),
+        ExecuteMsg::ReceiveNft(msg) => execute_receive_nft(deps, env, info, msg),
         ExecuteMsg::CounterPartyContract { addr } => execute_counterparty_contract(deps, addr),
         ExecuteMsg::Ics721AckCallback(msg) => execute_ack_callback(deps, env, info, msg),
         ExecuteMsg::Ics721ReceiveCallback(msg) => execute_receive_callback(deps, env, info, msg),
@@ -126,6 +126,7 @@ fn create_mint_msg(deps: DepsMut, cw721: Addr, owner: String) -> Result<SubMsg, 
 fn execute_receive_nft(
     deps: DepsMut,
     env: Env,
+    info: MessageInfo,
     msg: Cw721ReceiveMsg,
 ) -> Result<Response, ContractError> {
     let ics721 = ADDR_ICS721.load(deps.storage)?;
@@ -141,7 +142,7 @@ fn execute_receive_nft(
     let memo = create_memo(deps.storage, env, msg.sender, msg.token_id.clone())?;
     ibc_msg.memo = Some(Binary::to_base64(&to_json_binary(&memo)?));
     // forward nft to ics721 or outgoing proxy
-    let cw721 = ADDR_CW721.load(deps.storage)?;
+    let cw721 = info.sender;
     let send_msg = WasmMsg::Execute {
         contract_addr: cw721.to_string(),
         msg: to_json_binary(&cw721_base::msg::ExecuteMsg::<
@@ -158,6 +159,7 @@ fn execute_receive_nft(
     Ok(Response::default()
         .add_message(send_msg)
         .add_attribute("method", "execute_receive_nft")
+        .add_attribute("cw721", cw721)
         .add_attribute("receiver", ibc_msg.receiver.clone())
         .add_attribute("channel_id", ibc_msg.channel_id.clone()))
 }
@@ -202,25 +204,32 @@ fn execute_receive_callback(
 
     // ========= 1. change token uri
     let CallbackMsg { token_id, sender } = from_json(msg.msg)?;
-    let update_nft_info =
-        create_update_nft_info_msg(deps.as_ref(), msg.nft_contract, token_id.clone())?;
+    let transferred_token_uri = TRANSFERRED_TOKEN_URI.load(deps.storage)?;
+    let update_nft_info = create_update_nft_info_msg(
+        deps.as_ref(),
+        msg.nft_contract,
+        token_id.clone(),
+        transferred_token_uri,
+    )?;
     // ========= 2. mint poap
     let poap = ADDR_POAP.load(deps.storage)?;
     let mint_poap = create_mint_msg(deps, poap, msg.original_packet.receiver)?;
 
     Ok(Response::default()
-        .add_message(update_nft_info)
+        .add_submessage(update_nft_info)
         .add_submessage(mint_poap)
         .add_attribute("method", "execute_receive_callback")
         .add_attribute("token_id", token_id)
         .add_attribute("sender", sender))
 }
 
+/// This is call on receive and ack. In case of back transfer, on ack NFT is burned and may error and this is fine.
 fn create_update_nft_info_msg(
     deps: Deps,
     cw721: String,
     token_id: String,
-) -> Result<WasmMsg, ContractError> {
+    escrowed_or_transferred_token_uri: String,
+) -> Result<SubMsg, ContractError> {
     // - get nft info
     let all_nft_info: AllNftInfoResponse<DefaultOptionalNftExtension> =
         deps.querier.query_wasm_smart(
@@ -234,14 +243,13 @@ fn create_update_nft_info_msg(
                 include_expired: None,
             },
         )?;
-
-    // check if token uri is escrowed
-    let token_uri = all_nft_info.info.token_uri.unwrap(); // unwrap is safe here, since we set token_uri during mint
-    let escrowed_token_uri = ESCROWED_TOKEN_URI.load(deps.storage)?;
-    let new_token_uri = if token_uri == escrowed_token_uri {
-        DEFAULT_TOKEN_URI.load(deps.storage)?
+    let current_token_uri = all_nft_info.info.token_uri.unwrap(); // unwrap is safe here, since we set token_uri during mint
+                                                                  // check if token uri is escrowed
+    let default_token_uri = DEFAULT_TOKEN_URI.load(deps.storage)?;
+    let new_token_uri = if current_token_uri == default_token_uri {
+        escrowed_or_transferred_token_uri
     } else {
-        escrowed_token_uri
+        default_token_uri
     };
     // - set new token uri
     let update_nft_info: WasmMsg = WasmMsg::Execute {
@@ -257,7 +265,8 @@ fn create_update_nft_info_msg(
         })?,
         funds: vec![],
     };
-    Ok(update_nft_info)
+    let sub_msg = SubMsg::reply_always(update_nft_info, NOOP_REPLY_ID);
+    Ok(sub_msg)
 }
 
 fn execute_ack_callback(
@@ -279,9 +288,14 @@ fn execute_ack_callback(
         .add_attribute("sender", sender);
     match msg.status {
         Ics721Status::Success => {
-            let update_nft_info =
-                create_update_nft_info_msg(deps.as_ref(), msg.nft_contract, token_id)?;
-            Ok(res.add_message(update_nft_info))
+            let escrowed_token_uri = ESCROWED_TOKEN_URI.load(deps.storage)?;
+            let update_nft_info = create_update_nft_info_msg(
+                deps.as_ref(),
+                msg.nft_contract,
+                token_id,
+                escrowed_token_uri,
+            )?;
+            Ok(res.add_submessage(update_nft_info))
         }
         Ics721Status::Failed(error) => Ok(res.add_attribute("error", error)),
     }
@@ -305,8 +319,12 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
-    todo!()
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    Ok(Response::default()
+        .add_attribute("method", "migrate")
+        .add_attribute("contract_name", CONTRACT_NAME)
+        .add_attribute("contract_version", CONTRACT_VERSION))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -337,6 +355,7 @@ pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, Contrac
             SubMsgResult::Ok(_) => Ok(response),
             SubMsgResult::Err(error) => Err(ContractError::MintFailed { error }),
         },
+        NOOP_REPLY_ID => Ok(response),
         _ => Err(ContractError::UnrecognisedReplyId {}),
     }
 }
