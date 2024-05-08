@@ -2,7 +2,7 @@
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 # Description: Uploads contracts
 
-for ENV in "osmosis" "stargaze"; do
+for ENV in "stargaze" "osmosis"; do
     echo "================================================================"
     echo "reading $SCRIPT_DIR/$ENV.env"
     source $SCRIPT_DIR/$ENV.env
@@ -42,6 +42,5 @@ for ENV in "osmosis" "stargaze"; do
         echo "============ Updating $CONTRACT code id to $CODE_ID"
         echo sed -i "s/\".*$CONTRACT/\"$CODE_ID\" # $CONTRACT/" $SCRIPT_DIR/$ENV.env
         sed -i "s/\".*$CONTRACT/\"$CODE_ID\" # $CONTRACT/" $SCRIPT_DIR/$ENV.env
-        exit 0
     done
 done
