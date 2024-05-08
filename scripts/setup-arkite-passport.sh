@@ -14,6 +14,7 @@ for ENV in "osmosis" "stargaze"; do
     POAP_MSG_RAW="{\"name\": \"Arkite POAP collection\", \"symbol\": \"poap\"}"
     POAP_MSG=$(echo "$POAP_MSG_RAW" | base64 | xargs | sed 's/ //g')
 
+    # cw721_admin needs to be set, this way creator can be transitioned from ics721 to any wallet
     ICS721_MSG_RAW="{\"cw721_base_code_id\": $CODE_ID_CW721, \"cw721_admin\": \"$WALLET_ARKITE_PASSPORT\", \"pauser\": \"$WALLET_ARKITE_PASSPORT\"}"
     ICS721_MSG=$(echo "$ICS721_MSG_RAW" | base64 | xargs | sed 's/ //g')
 
@@ -77,6 +78,71 @@ for ENV in "osmosis" "stargaze"; do
     ADDR_ICS721=$(echo "$ADDR_ICS721" | sed 's/"//g')
     echo "ADDR_ICS721: $ADDR_ICS721"
     CMD="sed -i \"s@export ADDR_ICS721.*@export ADDR_ICS721=\\\"$ADDR_ICS721\\\"@\" $SCRIPT_DIR/$ENV.env"
+    echo $CMD
+    eval $CMD
+
+done
+
+echo "================================================================"
+echo "setting counter party contracts"
+for SOURCE_CHAIN in "osmosis" "stargaze"; do
+    echo "================================================================"
+    echo "reading $SCRIPT_DIR/$SOURCE_CHAIN.env"
+    source $SCRIPT_DIR/$SOURCE_CHAIN.env
+
+    SOURCE_CHAIN=$1
+    if [ "$SOURCE_CHAIN" == "stargaze" ]; then
+        TARGET_CHAIN="osmosis"
+    else
+        TARGET_CHAIN="stargaze"
+    fi
+
+    MSG="'{\"counter_party_contract\": { \"addr\": \"$(
+        source $SCRIPT_DIR/$TARGET_CHAIN.env
+        echo $ADDR_ARKITE_PASSPORT
+    )\"}}'"
+    CMD="$CLI tx wasm execute $ADDR_ARKITE_PASSPORT $MSG --from $WALLET_ARKITE_PASSPORT --gas-prices $CLI_GAS_PRICES --gas $CLI_GAS --gas-adjustment $CLI_GAS_ADJUSTMENT -b $CLI_BROADCAST_MODE --chain-id $CHAIN_ID --node $CHAIN_NODE --yes"
+    echo $CMD
+    OUTPUT=$(eval $CMD)
+    EXIT_CODE=$?
+    if [ $EXIT_CODE != 0 ]; then
+        exit "$EXIT_CODE"
+    fi
+
+    TX_HASH=$(echo $OUTPUT | jq -r ".txhash")
+    echo "TX_HASH: $TX_HASH"
+
+done
+
+echo "================================================================"
+echo "setting counter party contracts"
+for SOURCE_CHAIN in "osmosis" "stargaze"; do
+    echo "================================================================"
+    echo "reading $SCRIPT_DIR/$SOURCE_CHAIN.env"
+    source $SCRIPT_DIR/$SOURCE_CHAIN.env
+
+    if [ "$SOURCE_CHAIN" == "stargaze" ]; then
+        TARGET_CHAIN="osmosis"
+    else
+        TARGET_CHAIN="stargaze"
+    fi
+
+    MSG="'{\"counter_party_contract\": { \"addr\": \"$(
+        source $SCRIPT_DIR/$TARGET_CHAIN.env
+        echo $ADDR_ARKITE_PASSPORT
+    )\"}}'"
+    CMD="$CLI tx wasm execute $ADDR_ARKITE_PASSPORT $MSG --from $WALLET_ARKITE_PASSPORT --gas-prices $CLI_GAS_PRICES --gas $CLI_GAS --gas-adjustment $CLI_GAS_ADJUSTMENT -b $CLI_BROADCAST_MODE --chain-id $CHAIN_ID --node $CHAIN_NODE --yes"
+    echo $CMD
+    OUTPUT=$(eval $CMD)
+    EXIT_CODE=$?
+    if [ $EXIT_CODE != 0 ]; then
+        exit "$EXIT_CODE"
+    fi
+
+    TX_HASH=$(echo $OUTPUT | jq -r ".txhash")
+    echo "TX_HASH: $TX_HASH"
+    sleep 10
+    CMD="$CLI query wasm contract-state smart $ADDR_ARKITE_PASSPORT '{\"counter_party_contract\":{}}' --chain-id $CHAIN_ID --node $CHAIN_NODE --output json"
     echo $CMD
     eval $CMD
 

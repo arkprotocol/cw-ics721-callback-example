@@ -1,6 +1,6 @@
 #!/bin/bash
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-# Description: Upload contracts
+# Description: Mint NFT on source chain
 
 # check user provided chain
 if [ -z "$1" ]; then

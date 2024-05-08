@@ -2,7 +2,7 @@
 
 ## binaries
 
-- cw_ics721_arkite_passport.wasm: checksum 9dff21bc36e17cbe08e404971de53139b766c9a8cca5e06c496d1c4b63264c48
+- cw_ics721_arkite_passport.wasm: checksum 268e3e454f3dfd95c081865efc2f271885535d9876243b003ef7d4f70a603a71
 - ics721_base.wasm: checksum cc2aa1c858e4edc6e07b92a096b5397e2b375a111f62068177bc942bc9a65315
 - cw721_base.wasm: checksum bf1652988c7a633969221ccdd7d2dcb04cfa3081af31db4478d01e9dcdccda02
 - cw_ics721_incoming_proxy_base.wasm: checksum 32dd48b27688b4f7783bccd506006b6c0754db79deccca92a9db13d8e4aa7355

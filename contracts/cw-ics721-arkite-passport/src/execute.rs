@@ -27,7 +27,7 @@ use crate::{
         ESCROWED_TOKEN_URI, TRANSFERRED_TOKEN_URI,
     },
     INSTANTIATE_CW721_REPLY_ID, INSTANTIATE_ICS721_REPLY_ID, INSTANTIATE_POAP_REPLY_ID,
-    MINT_NFT_REPLY_ID, NOOP_REPLY_ID,
+    MINT_NFT_REPLY_ID, UPDATE_NFT_REPLY_ID,
 };
 
 const CONTRACT_NAME: &str = "crates.io:arkite-passport";
@@ -214,10 +214,10 @@ fn execute_receive_callback(
     // ========= 2. mint poap
     let poap = ADDR_POAP.load(deps.storage)?;
     let mint_poap = create_mint_msg(deps, poap, msg.original_packet.receiver)?;
+    let sub_msgs = vec![update_nft_info, mint_poap];
 
     Ok(Response::default()
-        .add_submessage(update_nft_info)
-        .add_submessage(mint_poap)
+        .add_submessages(sub_msgs)
         .add_attribute("method", "execute_receive_callback")
         .add_attribute("token_id", token_id)
         .add_attribute("sender", sender))
@@ -265,7 +265,7 @@ fn create_update_nft_info_msg(
         })?,
         funds: vec![],
     };
-    let sub_msg = SubMsg::reply_always(update_nft_info, NOOP_REPLY_ID);
+    let sub_msg = SubMsg::reply_always(update_nft_info, UPDATE_NFT_REPLY_ID);
     Ok(sub_msg)
 }
 
@@ -355,7 +355,10 @@ pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, Contrac
             SubMsgResult::Ok(_) => Ok(response),
             SubMsgResult::Err(error) => Err(ContractError::MintFailed { error }),
         },
-        NOOP_REPLY_ID => Ok(response),
+        UPDATE_NFT_REPLY_ID => match reply.result {
+            SubMsgResult::Ok(_) => Ok(response),
+            SubMsgResult::Err(error) => Err(ContractError::UpdateNftFailed { error }),
+        },
         _ => Err(ContractError::UnrecognisedReplyId {}),
     }
 }

@@ -16,6 +16,9 @@ pub enum ContractError {
     #[error("Failed to mint NFT: {error}")]
     MintFailed { error: String },
 
+    #[error("Failed to update NFT: {error}")]
+    UpdateNftFailed { error: String },
+
     #[error("Unauthorized callback. Only ICS721 can call back.")]
     UnauthorizedCallback {},
 }

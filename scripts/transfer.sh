@@ -96,21 +96,33 @@ MSG="'{\"all_nft_info\":{\"token_id\": \"$TOKEN_ID\"}}'"
 CMD="$CLI query wasm contract-state smart $SOURCE_NFT_CONTRACT $MSG --chain-id $CHAIN_ID --node $CHAIN_NODE --output $CLI_OUTPUT"
 echo $CMD
 OUTPUT=$(eval $CMD)
-SOURCE_TOKEN_URI=$(echo $OUTPUT | jq -r ".data.info.token_uri")
-SOURCE_OWNER=$(echo $OUTPUT | jq -r ".data.access.owner")
+ERROR_CODE=${PIPESTATUS[0]}
 echo "------------------------------------------------------------"
 echo "$SOURCE_CHAIN"
-echo "- nft contract: $SOURCE_NFT_CONTRACT"
-echo "- NFT #$TOKEN_ID, token uri: $SOURCE_TOKEN_URI, owner: $SOURCE_OWNER (ics721: $ADDR_ICS721)"
+if [ $ERROR_CODE -ne 0 ]; then
+    echo "Failed to upload $CONTRACT to $ENV: $TX_HASH"
+    echo "- NFT #$TOKEN_ID got burned"
+    BURNED=true
+else
+    SOURCE_TOKEN_URI=$(echo $OUTPUT | jq -r ".data.info.token_uri")
+    SOURCE_OWNER=$(echo $OUTPUT | jq -r ".data.access.owner")
+    echo "- nft contract: $SOURCE_NFT_CONTRACT"
+    echo "- NFT #$TOKEN_ID, token uri: $SOURCE_TOKEN_URI, owner: $SOURCE_OWNER (ics721: $ADDR_ICS721)"
+fi
 echo "------------------------------------------------------------"
 
 # query target chain for NFT
 source $SCRIPT_DIR/$TARGET_CHAIN.env
-# - ics721 query for nft contract
-QUERY_MSG="'{\"nft_contract\":{\"class_id\":\"wasm.$ADDR_ICS721/$CHANNEL_ID/$SOURCE_NFT_CONTRACT\"}}'"
-QUERY_CMD="$CLI query wasm contract-state smart $ADDR_ICS721 $QUERY_MSG --chain-id $CHAIN_ID --node $CHAIN_NODE --output $CLI_OUTPUT"
-QUERY_OUTPUT=$(eval $QUERY_CMD)
-TARGET_NFT_CONTRACT=$(echo $QUERY_OUTPUT | jq -r ".data")
+# - check if burned
+if [ "$BURNED" = true ]; then
+    TARGET_NFT_CONTRACT=$ADDR_CW721
+else
+    # - ics721 query for nft contract
+    QUERY_MSG="'{\"nft_contract\":{\"class_id\":\"wasm.$ADDR_ICS721/$CHANNEL_ID/$SOURCE_NFT_CONTRACT\"}}'"
+    QUERY_CMD="$CLI query wasm contract-state smart $ADDR_ICS721 $QUERY_MSG --chain-id $CHAIN_ID --node $CHAIN_NODE --output $CLI_OUTPUT"
+    QUERY_OUTPUT=$(eval $QUERY_CMD)
+    TARGET_NFT_CONTRACT=$(echo $QUERY_OUTPUT | jq -r ".data")
+fi
 # - cw721 query for nft info
 CMD="$CLI query wasm contract-state smart $TARGET_NFT_CONTRACT $MSG --chain-id $CHAIN_ID --node $CHAIN_NODE --output $CLI_OUTPUT"
 echo $CMD
