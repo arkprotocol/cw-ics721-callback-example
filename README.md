@@ -23,11 +23,14 @@ Ark Protocol is the main contributor for `cw-ics721` and `cw-nfts`. Recent utili
 
 ## Intro
 
-This is a full example demoes how cw721 interacts with ics721 and its outgoing proxies.
+This is a full example demoing how cw721 interacts with ics721, incoming, and outgoing proxies.
 For the interchain transfer optional receive and ack callbacks are attached:
 
-- receive callback mutates the NFT's metadata (token uri) on target chain
-- ack callback mutates NFT on source chain AND creates a POAP NFT
+- receive callback on `arkite-passport` contract:
+  - mutates the NFT's metadata (token uri) on target chain
+  - mints a POAP NFT
+- ack callback on `arkite-passport` contract:
+  - mutates NFT on source chain
 
 The following contracts are setup:
 
@@ -36,7 +39,10 @@ The following contracts are setup:
 - a `POAP` collection using `cw721-base`
 - ics721 contracts: `ics721-base`, `cw-ics721-outgoing-proxy-base`, and `cw-ics721-incoming-proxy-base`
 
+Read more in [scripts/SETUP.md](./scripts/SETUP.md).
+
 The workflow for transferring an NFT from Stargaze to Osmosis is:
+
 - user calls `send_nft` to `arkite-passport` contract
 - `arkite-passport` transfers NFT to target chain
   - attaches receive and ack callback as part of memo
