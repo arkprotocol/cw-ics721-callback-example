@@ -420,6 +420,7 @@ impl Test {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn execute_ack_callback(
         &mut self,
         ics721: Addr,

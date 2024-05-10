@@ -36,7 +36,7 @@ for ENV in "osmosis" "stargaze"; do
     eval $CMD
 
     echo "============ instantiating outgoing proxy"
-    MSG="'{\"origin\": \"$ADDR_ICS721\", \"rate_limit\": {\"per_block\": 1000}}'"
+    MSG="'{\"origin\": \"$ADDR_ICS721\", \"rate_limit\": {\"per_block\": 1}}'"
     CMD="$CLI tx wasm instantiate $CODE_ID_OUTGOING_PROXY "$MSG" --from $WALLET_ARKITE_PASSPORT --label 'ICS721 Outgoing Proxy (powered by Ark)' --admin $WALLET_ARKITE_PASSPORT --gas-prices $CLI_GAS_PRICES --gas $CLI_GAS --gas-adjustment $CLI_GAS_ADJUSTMENT -b $CLI_BROADCAST_MODE --yes --node $CHAIN_NODE --chain-id $CHAIN_ID --output $CLI_OUTPUT"
     echo "executing cmd: $CMD" >&2
     OUTPUT=$(eval $CMD)

@@ -1,3 +1,5 @@
+use std::vec;
+
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
@@ -27,7 +29,7 @@ use crate::{
         ESCROWED_TOKEN_URI, TRANSFERRED_TOKEN_URI,
     },
     INSTANTIATE_CW721_REPLY_ID, INSTANTIATE_ICS721_REPLY_ID, INSTANTIATE_POAP_REPLY_ID,
-    MINT_NFT_REPLY_ID, UPDATE_NFT_REPLY_ID,
+    MINT_NFT_REPLY_ID,
 };
 
 const CONTRACT_NAME: &str = "crates.io:arkite-passport";
@@ -41,19 +43,20 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    let mut sub_msgs: Vec<SubMsg<Empty>> = Vec::new();
-    sub_msgs.push(SubMsg::reply_on_success(
-        msg.cw721_base.into_wasm_msg(env.clone().contract.address),
-        INSTANTIATE_CW721_REPLY_ID,
-    ));
-    sub_msgs.push(SubMsg::reply_on_success(
-        msg.cw721_poap.into_wasm_msg(env.clone().contract.address),
-        INSTANTIATE_POAP_REPLY_ID,
-    ));
-    sub_msgs.push(SubMsg::reply_on_success(
-        msg.ics721_base.into_wasm_msg(env.clone().contract.address),
-        INSTANTIATE_ICS721_REPLY_ID,
-    ));
+    let sub_msgs: Vec<SubMsg<Empty>> = vec![
+        SubMsg::reply_on_success(
+            msg.cw721_base.into_wasm_msg(env.clone().contract.address),
+            INSTANTIATE_CW721_REPLY_ID,
+        ),
+        SubMsg::reply_on_success(
+            msg.cw721_poap.into_wasm_msg(env.clone().contract.address),
+            INSTANTIATE_POAP_REPLY_ID,
+        ),
+        SubMsg::reply_on_success(
+            msg.ics721_base.into_wasm_msg(env.clone().contract.address),
+            INSTANTIATE_ICS721_REPLY_ID,
+        ),
+    ];
     DEFAULT_TOKEN_URI.save(deps.storage, &msg.default_token_uri)?;
     ESCROWED_TOKEN_URI.save(deps.storage, &msg.escrowed_token_uri)?;
     TRANSFERRED_TOKEN_URI.save(deps.storage, &msg.transferred_token_uri)?;
@@ -214,22 +217,27 @@ fn execute_receive_callback(
     // ========= 2. mint poap
     let poap = ADDR_POAP.load(deps.storage)?;
     let mint_poap = create_mint_msg(deps, poap, msg.original_packet.receiver)?;
-    let sub_msgs = vec![update_nft_info, mint_poap];
 
     Ok(Response::default()
-        .add_submessages(sub_msgs)
+        .add_message(update_nft_info)
+        .add_submessage(mint_poap)
         .add_attribute("method", "execute_receive_callback")
         .add_attribute("token_id", token_id)
         .add_attribute("sender", sender))
 }
 
-/// This is call on receive and ack. In case of back transfer, on ack NFT is burned and may error and this is fine.
+/// Updates NftInfo with new token uri on both, source (ack) and target (receive) chain.
+/// This is executed as a message (not sub message) allowing global TX to succeed and not to roll back, for 2 reasons:
+/// - back transfer/on ack: NFT is burned and may error and this is fine
+/// - on initial transfer: ics721 is creator of voucher collection on target chain. So this contract cant update NFT Info.
+///
+/// In future releases of ics721 this may change, allowing to pass creator of voucher collection to ics721.
 fn create_update_nft_info_msg(
     deps: Deps,
     cw721: String,
     token_id: String,
     escrowed_or_transferred_token_uri: String,
-) -> Result<SubMsg, ContractError> {
+) -> Result<WasmMsg, ContractError> {
     // - get nft info
     let all_nft_info: AllNftInfoResponse<DefaultOptionalNftExtension> =
         deps.querier.query_wasm_smart(
@@ -265,8 +273,7 @@ fn create_update_nft_info_msg(
         })?,
         funds: vec![],
     };
-    let sub_msg = SubMsg::reply_always(update_nft_info, UPDATE_NFT_REPLY_ID);
-    Ok(sub_msg)
+    Ok(update_nft_info)
 }
 
 fn execute_ack_callback(
@@ -295,7 +302,7 @@ fn execute_ack_callback(
                 token_id,
                 escrowed_token_uri,
             )?;
-            Ok(res.add_submessage(update_nft_info))
+            Ok(res.add_message(update_nft_info))
         }
         Ics721Status::Failed(error) => Ok(res.add_attribute("error", error)),
     }
@@ -354,10 +361,6 @@ pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, Contrac
         MINT_NFT_REPLY_ID => match reply.result {
             SubMsgResult::Ok(_) => Ok(response),
             SubMsgResult::Err(error) => Err(ContractError::MintFailed { error }),
-        },
-        UPDATE_NFT_REPLY_ID => match reply.result {
-            SubMsgResult::Ok(_) => Ok(response),
-            SubMsgResult::Err(error) => Err(ContractError::UpdateNftFailed { error }),
         },
         _ => Err(ContractError::UnrecognisedReplyId {}),
     }
