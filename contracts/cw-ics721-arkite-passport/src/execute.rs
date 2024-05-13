@@ -326,12 +326,39 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-    Ok(Response::default()
+    let response: Response<Empty> = Response::default()
         .add_attribute("method", "migrate")
         .add_attribute("contract_name", CONTRACT_NAME)
-        .add_attribute("contract_version", CONTRACT_VERSION))
+        .add_attribute("contract_version", CONTRACT_VERSION);
+    match msg {
+        MigrateMsg::WithUpdate {
+            default_token_uri,
+            escrowed_token_uri,
+            transferred_token_uri,
+        } => {
+            let response = if let Some(token_uri) = default_token_uri {
+                DEFAULT_TOKEN_URI.save(deps.storage, &token_uri)?;
+                response.add_attribute("default_token_uri", token_uri)
+            } else {
+                response
+            };
+            let response = if let Some(token_uri) = escrowed_token_uri {
+                ESCROWED_TOKEN_URI.save(deps.storage, &token_uri)?;
+                response.add_attribute("escrowed_token_uri", token_uri)
+            } else {
+                response
+            };
+            let response = if let Some(token_uri) = transferred_token_uri {
+                TRANSFERRED_TOKEN_URI.save(deps.storage, &token_uri)?;
+                response.add_attribute("transferred_token_uri", token_uri)
+            } else {
+                response
+            };
+            Ok(response)
+        }
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

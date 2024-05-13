@@ -24,7 +24,7 @@ use sha2::{digest::Update, Digest, Sha256};
 use crate::{
     error::ContractError,
     execute,
-    msg::{CallbackMsg, ExecuteMsg, InstantiateMsg, QueryMsg},
+    msg::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg},
 };
 
 use ics721::msg::{InstantiateMsg as Ics721InstantiateMsg, MigrateMsg as Ics721MigrateMsg};
@@ -114,6 +114,7 @@ struct Test {
     creator: Addr,
     nft_owner: Addr,
     other_chain_wallet: Addr,
+    code_id_arkite_passport: u64,
     addr_arkite_contract: Addr,
     addr_poap_contract: Addr,
     addr_cw721_contract: Addr,
@@ -195,7 +196,7 @@ impl Test {
                 },
                 &[],
                 "cw721-base",
-                None,
+                Some(creator.to_string()),
             )
             .unwrap();
 
@@ -265,6 +266,7 @@ impl Test {
             creator,
             nft_owner,
             other_chain_wallet,
+            code_id_arkite_passport,
             addr_arkite_contract,
             addr_poap_contract,
             addr_cw721_contract,
@@ -513,11 +515,30 @@ impl Test {
             &[],
         )
     }
+
+    fn migrate_arkite_contract(
+        &mut self,
+        default_token_uri: Option<String>,
+        escrowed_token_uri: Option<String>,
+        transferred_token_uri: Option<String>,
+    ) -> Result<AppResponse, anyhow::Error> {
+        self.app.migrate_contract(
+            self.creator.clone(),
+            self.addr_arkite_contract.clone(),
+            &MigrateMsg::WithUpdate {
+                default_token_uri,
+                escrowed_token_uri,
+                transferred_token_uri,
+            },
+            self.code_id_arkite_passport,
+        )
+    }
 }
 
 fn arkite_passport_contract() -> Box<dyn Contract<Empty>> {
     let contract = ContractWrapper::new(execute::execute, execute::instantiate, execute::query)
-        .with_reply(execute::reply);
+        .with_reply(execute::reply)
+        .with_migrate(execute::migrate);
     Box::new(contract)
 }
 
@@ -856,5 +877,41 @@ fn test_ack_callback() {
             test.nft_owner.to_string(),
         )
         .unwrap();
+    }
+}
+
+#[test]
+fn test_migrate() {
+    // case 1: migrate with no changes
+    {
+        let mut test = Test::new();
+        test.migrate_arkite_contract(None, None, None).unwrap();
+        // assert results
+        let default_token_uri = test.query_default_token_uri();
+        assert_eq!(default_token_uri, DEFAULT_TOKEN_URI.to_string());
+        let escrowed_token_uri = test.query_escrowed_token_uri();
+        assert_eq!(escrowed_token_uri, ESCROWED_TOKEN_URI.to_string());
+        let transferred_token_uri = test.query_transferred_token_uri();
+        assert_eq!(transferred_token_uri, TRANSFERRED_TOKEN_URI.to_string());
+    }
+    // case 2: migrate with changes
+    {
+        let mut test = Test::new();
+        test.migrate_arkite_contract(
+            Some("new default token uri".to_string()),
+            Some("new escrowed token uri".to_string()),
+            Some("new transferred token uri".to_string()),
+        )
+        .unwrap();
+        // assert results
+        let default_token_uri = test.query_default_token_uri();
+        assert_eq!(default_token_uri, "new default token uri".to_string());
+        let escrowed_token_uri = test.query_escrowed_token_uri();
+        assert_eq!(escrowed_token_uri, "new escrowed token uri".to_string());
+        let transferred_token_uri = test.query_transferred_token_uri();
+        assert_eq!(
+            transferred_token_uri,
+            "new transferred token uri".to_string()
+        );
     }
 }

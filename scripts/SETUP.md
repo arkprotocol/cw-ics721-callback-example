@@ -2,7 +2,7 @@
 
 For the Arkite Passport example these smart contracts have been deployed on Stargaze and Osmosis testnet:
 
-- cw_ics721_arkite_passport.wasm: checksum 03e11d9fb65a92bc2b58f07970635c0e792c5b401e5bf93be4ae370739d50f55
+- cw_ics721_arkite_passport.wasm: checksum f395f1b15f4b647f21ca098b24a7fce39cfe961e096361eb64c3b8497ce1b86b
 - ics721_base.wasm: checksum cc2aa1c858e4edc6e07b92a096b5397e2b375a111f62068177bc942bc9a65315
 - cw721_base.wasm: checksum bf1652988c7a633969221ccdd7d2dcb04cfa3081af31db4478d01e9dcdccda02
 - cw_ics721_incoming_proxy_base.wasm: checksum 32dd48b27688b4f7783bccd506006b6c0754db79deccca92a9db13d8e4aa7355

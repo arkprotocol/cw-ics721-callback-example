@@ -48,7 +48,11 @@ pub enum QueryMsg {
 
 #[cw_serde]
 pub enum MigrateMsg {
-    WithUpdate {},
+    WithUpdate {
+        default_token_uri: Option<String>,
+        escrowed_token_uri: Option<String>,
+        transferred_token_uri: Option<String>,
+    },
 }
 
 #[cw_serde]
