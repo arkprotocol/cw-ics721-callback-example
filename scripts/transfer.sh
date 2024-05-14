@@ -130,8 +130,15 @@ echo $CMD
 OUTPUT=$(eval $CMD)
 TARGET_TOKEN_URI=$(echo $OUTPUT | jq -r ".data.info.extension.image")
 TARGET_OWNER=$(echo $OUTPUT | jq -r ".data.access.owner")
+POAP_TOKEN_ID=$($CLI query wasm contract-state smart $ADDR_POAP '{"num_tokens":{}}' --chain-id $CHAIN_ID --node $CHAIN_NODE --output json | jq -r '.data.count')
+if [ -n "${POAP_TOKEN_ID-}" ]; then
+    POAP_TOKEN_ID=$((POAP_TOKEN_ID - 1))
+fi
 echo "------------------------------------------------------------"
 echo "$TARGET_CHAIN"
 echo "- nft contract: $TARGET_NFT_CONTRACT"
 echo "- NFT #$TOKEN_ID, token uri: $TARGET_TOKEN_URI, owner: $TARGET_OWNER (ics721: $ADDR_ICS721)"
+if [ -n "${POAP_TOKEN_ID-}" ]; then
+    echo "- POAP NFT #$POAP_TOKEN_ID"
+fi
 echo "------------------------------------------------------------"
