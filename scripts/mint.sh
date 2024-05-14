@@ -51,7 +51,7 @@ MSG="'{\"all_nft_info\":{\"token_id\": \"$TOKEN_ID\"}}'"
 CMD="$CLI query wasm contract-state smart $ADDR_CW721 $MSG --chain-id $CHAIN_ID --node $CHAIN_NODE --output $CLI_OUTPUT"
 echo $CMD
 OUTPUT=$(eval $CMD)
-SOURCE_TOKEN_URI=$(echo $OUTPUT | jq -r ".data.info.token_uri")
+SOURCE_TOKEN_URI=$(echo $OUTPUT | jq -r ".data.info.extension.image")
 SOURCE_OWNER=$(echo $OUTPUT | jq -r ".data.access.owner")
 echo "------------------------------------------------------------"
 echo "$SOURCE_CHAIN"

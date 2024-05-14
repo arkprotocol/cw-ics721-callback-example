@@ -24,7 +24,7 @@ use sha2::{digest::Update, Digest, Sha256};
 use crate::{
     error::ContractError,
     execute,
-    msg::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg},
+    msg::{CallbackData, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg},
 };
 
 use ics721::msg::{InstantiateMsg as Ics721InstantiateMsg, MigrateMsg as Ics721MigrateMsg};
@@ -428,7 +428,7 @@ impl Test {
         ics721: Addr,
         class_id: ClassId,
         status: Ics721Status,
-        msg: CallbackMsg,
+        msg: CallbackData,
         token_id: String,
         receiver: String,
         sender: String,
@@ -460,7 +460,7 @@ impl Test {
         &mut self,
         ics721: Addr,
         class_id: ClassId,
-        msg: CallbackMsg,
+        msg: CallbackData,
         token_id: String,
         receiver: String,
         sender: String,
@@ -651,7 +651,7 @@ fn test_mint() {
         test.query_cw721_all_nft_info(test.addr_cw721_contract.clone(), "0".to_string());
     assert_eq!(all_nft_info.access.owner, test.nft_owner);
     assert_eq!(
-        all_nft_info.info.token_uri,
+        all_nft_info.info.extension.unwrap().image,
         Some(DEFAULT_TOKEN_URI.to_string())
     );
 }
@@ -686,9 +686,12 @@ fn test_receive_callback() {
             .execute_receive_callback(
                 test.addr_cw721_contract.clone(), // unauthorized
                 ClassId::new("some/class/id"),
-                CallbackMsg {
+                CallbackData {
                     sender: test.other_chain_wallet.to_string(),
                     token_id: "1".to_string(),
+                    default_token_uri: DEFAULT_TOKEN_URI.to_string(),
+                    escrowed_token_uri: ESCROWED_TOKEN_URI.to_string(),
+                    transferred_token_uri: TRANSFERRED_TOKEN_URI.to_string(),
                 },
                 "1".to_string(),
                 test.nft_owner.to_string(),
@@ -709,7 +712,7 @@ fn test_receive_callback() {
             test.query_cw721_all_nft_info(test.addr_cw721_contract.clone(), "0".to_string());
         assert_eq!(all_nft_info.access.owner, test.nft_owner);
         assert_eq!(
-            all_nft_info.info.token_uri,
+            all_nft_info.info.extension.unwrap().image,
             Some(DEFAULT_TOKEN_URI.to_string())
         );
         // assert no poaps yet minted
@@ -722,9 +725,12 @@ fn test_receive_callback() {
         test.execute_receive_callback(
             test.addr_ics721_contract.clone(),
             ClassId::new("some/class/id"),
-            CallbackMsg {
+            CallbackData {
                 sender: test.other_chain_wallet.to_string(),
                 token_id: "0".to_string(),
+                default_token_uri: DEFAULT_TOKEN_URI.to_string(),
+                escrowed_token_uri: ESCROWED_TOKEN_URI.to_string(),
+                transferred_token_uri: TRANSFERRED_TOKEN_URI.to_string(),
             },
             "0".to_string(),
             test.nft_owner.to_string(),
@@ -739,6 +745,10 @@ fn test_receive_callback() {
             all_nft_info.info.token_uri,
             Some(TRANSFERRED_TOKEN_URI.to_string())
         );
+        assert_eq!(
+            all_nft_info.info.extension.unwrap().image,
+            Some(TRANSFERRED_TOKEN_URI.to_string())
+        );
         // assert one poap minted
         let supply = test
             .query_cw721_num_tokens(test.addr_poap_contract.clone())
@@ -749,9 +759,12 @@ fn test_receive_callback() {
         test.execute_receive_callback(
             test.addr_ics721_contract.clone(),
             ClassId::new(test.addr_cw721_contract.to_string()),
-            CallbackMsg {
+            CallbackData {
                 sender: test.other_chain_wallet.to_string(),
                 token_id: "0".to_string(),
+                default_token_uri: DEFAULT_TOKEN_URI.to_string(),
+                escrowed_token_uri: ESCROWED_TOKEN_URI.to_string(),
+                transferred_token_uri: TRANSFERRED_TOKEN_URI.to_string(),
             },
             "0".to_string(),
             test.nft_owner.to_string(),
@@ -763,7 +776,7 @@ fn test_receive_callback() {
             test.query_cw721_all_nft_info(test.addr_cw721_contract.clone(), "0".to_string());
         assert_eq!(all_nft_info.access.owner, test.nft_owner);
         assert_eq!(
-            all_nft_info.info.token_uri,
+            all_nft_info.info.extension.unwrap().image,
             Some(DEFAULT_TOKEN_URI.to_string())
         );
         // assert one poap minted
@@ -785,9 +798,12 @@ fn test_ack_callback() {
                 test.addr_cw721_contract.clone(), // unauthorized
                 ClassId::new("some/class/id"),
                 Ics721Status::Success,
-                CallbackMsg {
+                CallbackData {
                     sender: test.nft_owner.to_string(),
                     token_id: "0".to_string(),
+                    default_token_uri: DEFAULT_TOKEN_URI.to_string(),
+                    escrowed_token_uri: ESCROWED_TOKEN_URI.to_string(),
+                    transferred_token_uri: TRANSFERRED_TOKEN_URI.to_string(),
                 },
                 "0".to_string(),
                 test.nft_owner.to_string(),
@@ -809,7 +825,7 @@ fn test_ack_callback() {
             test.query_cw721_all_nft_info(test.addr_cw721_contract.clone(), "0".to_string());
         assert_eq!(all_nft_info.access.owner, test.addr_ics721_contract);
         assert_eq!(
-            all_nft_info.info.token_uri,
+            all_nft_info.info.extension.unwrap().image,
             Some(DEFAULT_TOKEN_URI.to_string())
         );
 
@@ -818,9 +834,12 @@ fn test_ack_callback() {
             test.addr_ics721_contract.clone(),
             ClassId::new("some/class/id"),
             Ics721Status::Success,
-            CallbackMsg {
+            CallbackData {
                 sender: test.nft_owner.to_string(),
                 token_id: "0".to_string(),
+                default_token_uri: DEFAULT_TOKEN_URI.to_string(),
+                escrowed_token_uri: ESCROWED_TOKEN_URI.to_string(),
+                transferred_token_uri: TRANSFERRED_TOKEN_URI.to_string(),
             },
             "0".to_string(),
             test.nft_owner.to_string(),
@@ -832,7 +851,7 @@ fn test_ack_callback() {
             test.query_cw721_all_nft_info(test.addr_cw721_contract.clone(), "0".to_string());
         assert_eq!(all_nft_info.access.owner, test.addr_ics721_contract);
         assert_eq!(
-            all_nft_info.info.token_uri,
+            all_nft_info.info.extension.unwrap().image,
             Some(ESCROWED_TOKEN_URI.to_string())
         );
 
@@ -841,9 +860,12 @@ fn test_ack_callback() {
             test.addr_ics721_contract.clone(),
             ClassId::new(test.addr_cw721_contract.to_string()),
             Ics721Status::Success,
-            CallbackMsg {
+            CallbackData {
                 sender: test.nft_owner.to_string(),
                 token_id: "0".to_string(),
+                default_token_uri: DEFAULT_TOKEN_URI.to_string(),
+                escrowed_token_uri: ESCROWED_TOKEN_URI.to_string(),
+                transferred_token_uri: TRANSFERRED_TOKEN_URI.to_string(),
             },
             "0".to_string(),
             test.nft_owner.to_string(),
@@ -855,22 +877,28 @@ fn test_ack_callback() {
             test.query_cw721_all_nft_info(test.addr_cw721_contract.clone(), "0".to_string());
         assert_eq!(all_nft_info.access.owner, test.addr_ics721_contract);
         assert_eq!(
-            all_nft_info.info.token_uri,
+            all_nft_info.info.extension.unwrap().image,
             Some(DEFAULT_TOKEN_URI.to_string())
         );
     }
     // assert ack fail
     {
         let mut test = Test::new();
+        // pretend nft has been escrowed by ics721
+        test.execute_passport_mint(test.addr_ics721_contract.clone())
+            .unwrap();
 
         // process ack
         test.execute_ack_callback(
             test.addr_ics721_contract.clone(),
             ClassId::new("some/class/id"),
             Ics721Status::Failed("some reason".to_string()),
-            CallbackMsg {
+            CallbackData {
                 sender: test.nft_owner.to_string(),
                 token_id: "0".to_string(),
+                default_token_uri: DEFAULT_TOKEN_URI.to_string(),
+                escrowed_token_uri: ESCROWED_TOKEN_URI.to_string(),
+                transferred_token_uri: TRANSFERRED_TOKEN_URI.to_string(),
             },
             "0".to_string(),
             test.nft_owner.to_string(),

@@ -2,7 +2,7 @@
 
 For the Arkite Passport example these smart contracts have been deployed on Stargaze and Osmosis testnet:
 
-- cw_ics721_arkite_passport.wasm: checksum f395f1b15f4b647f21ca098b24a7fce39cfe961e096361eb64c3b8497ce1b86b
+- cw_ics721_arkite_passport.wasm: checksum 590219b6d391c7e634641891c9fc7c46130a5ae5bb33b8084feb9d83927b606c
 - ics721_base.wasm: checksum cc2aa1c858e4edc6e07b92a096b5397e2b375a111f62068177bc942bc9a65315
 - cw721_base.wasm: checksum bf1652988c7a633969221ccdd7d2dcb04cfa3081af31db4478d01e9dcdccda02
 - cw_ics721_incoming_proxy_base.wasm: checksum 32dd48b27688b4f7783bccd506006b6c0754db79deccca92a9db13d8e4aa7355
@@ -43,6 +43,8 @@ The `arkite-passport` contract must be instantiated first:
 ```sh
 ./scripts/setup-arkite-passport.sh
 ```
+
+IMPORTANT: Manually update port in `chains.packet_filter` in `config.toml`!
 
 This contract also instantiates 3 additional contracts. These env variables are then updated:
 
@@ -98,9 +100,14 @@ hermes --config ./relayer/hermes/config.toml --json create channel --a-chain $(s
 #     "status": "success"
 # }
 #
-# Manually update CHANNEL_ID in stargaze.env and osmosis.env based on output Hermes results!
+# Manually update CHANNEL_ID in config.toml, stargaze.env, and osmosis.env based on output Hermes results!
 
 ```
+
+IMPORTANT: Manually update:
+
+- CHANNEL_ID in stargaze.env and osmosis.env based on output Hermes results!
+- channel and port in config.toml!
 
 ### Proxy Contracts
 
@@ -122,7 +129,6 @@ More upcoming features are in the pipe, like:
 # - instantiate proxies with WL channel and rate limit of 1 NFT per block
 # - migrate ics721 and set proxies
 ./scripts/setup-proxies.sh
-
 ```
 
 ### Initial Test Setup
@@ -135,7 +141,6 @@ On transfer ics721 also creates a `passport` collection (aka `passport voucher`)
 Hence `arkite-passport` wont be able to update NFTs on target chain.
 
 Admin to the rescue - on initial transfer, voucher collection is created.
-
 
 ```sh
 # mint NFT e.g. with output:
@@ -183,10 +188,10 @@ Admin to the rescue - on initial transfer, voucher collection is created.
 ```
 
 Some notes here:
+
 - if hermes logs `ack: [ 123, 34, 114, 101, 115, 117, 108, 116, 34, 58, 34, 77, 81, 61, 61, 34, 125 ]` (=`{"result":"MQ=="}` ), then relaying was succcessful
 - please note, on initial transfer `token_uri` on target chain is unchanged (=`ipfs://passport/default`)
 - `token_uri` on target chain is unchanged, because there is no counter party contract defined yet for receive callback
-
 
 Finally, counter party contracts need to be set:
 
@@ -208,11 +213,11 @@ Once set, mint and transfer again - this time `token_uri` will be updated:
 ```
 
 Result output of above (forward) transfer:
+
 - `token_uri` on source chain is: `ipfs://passport/escrowed`
 - `token_uri` on target chain is: `ipfs://passport/transferred`
 
 Now let's do a back transfer:
-
 
 ```sh
 ./scripts/transfer.sh stargaze 1 stars1dj6sfh7vvn3qu2xzh2qysh7ng432c24rs70qf9xdvcchekwrsneqzgtqya
@@ -220,5 +225,6 @@ Now let's do a back transfer:
 ```
 
 Result output of above (back) transfer:
+
 - NFT is burned on Stargaze
 - `token_uri` on Osmosis is set back: `ipfs://passport/default`

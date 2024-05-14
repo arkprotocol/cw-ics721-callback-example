@@ -42,7 +42,7 @@ RECIPIENT=$(
     source $SCRIPT_DIR/$TARGET_CHAIN.env
     echo $WALLET_ARKITE_PASSPORT
 )
-TIMESTAMP=$(date -d "+60 minutes" +%s%N) # time in nano seconds, other options: "+1 day"
+TIMESTAMP=$(date -d "+5 minutes" +%s%N) # time in nano seconds, other options: "+1 day"
 printf -v RAW_MSG '{
 "receiver": "%s",
 "channel_id": "%s",
@@ -82,7 +82,7 @@ fi
 
 TX_HASH=$(echo $OUTPUT | jq -r ".txhash")
 echo "TX_HASH: $TX_HASH"
-sleep 10
+sleep 20
 
 echo "============ relaying packets"
 CMD="hermes --config ./relayer/hermes/config.toml clear packets --chain $CHAIN_ID --channel $CHANNEL_ID --port wasm.$ADDR_ICS721"
@@ -95,6 +95,7 @@ echo "============ checking NFTs"
 MSG="'{\"all_nft_info\":{\"token_id\": \"$TOKEN_ID\"}}'"
 CMD="$CLI query wasm contract-state smart $SOURCE_NFT_CONTRACT $MSG --chain-id $CHAIN_ID --node $CHAIN_NODE --output $CLI_OUTPUT"
 echo $CMD
+sleep 20
 OUTPUT=$(eval $CMD)
 ERROR_CODE=${PIPESTATUS[0]}
 echo "------------------------------------------------------------"
@@ -104,7 +105,7 @@ if [ $ERROR_CODE -ne 0 ]; then
     echo "- NFT #$TOKEN_ID got burned"
     BURNED=true
 else
-    SOURCE_TOKEN_URI=$(echo $OUTPUT | jq -r ".data.info.token_uri")
+    SOURCE_TOKEN_URI=$(echo $OUTPUT | jq -r ".data.info.extension.image")
     SOURCE_OWNER=$(echo $OUTPUT | jq -r ".data.access.owner")
     echo "- nft contract: $SOURCE_NFT_CONTRACT"
     echo "- NFT #$TOKEN_ID, token uri: $SOURCE_TOKEN_URI, owner: $SOURCE_OWNER (ics721: $ADDR_ICS721)"
@@ -127,7 +128,7 @@ fi
 CMD="$CLI query wasm contract-state smart $TARGET_NFT_CONTRACT $MSG --chain-id $CHAIN_ID --node $CHAIN_NODE --output $CLI_OUTPUT"
 echo $CMD
 OUTPUT=$(eval $CMD)
-TARGET_TOKEN_URI=$(echo $OUTPUT | jq -r ".data.info.token_uri")
+TARGET_TOKEN_URI=$(echo $OUTPUT | jq -r ".data.info.extension.image")
 TARGET_OWNER=$(echo $OUTPUT | jq -r ".data.access.owner")
 echo "------------------------------------------------------------"
 echo "$TARGET_CHAIN"

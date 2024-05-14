@@ -8,8 +8,9 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw721_base::{
-    msg::{AllNftInfoResponse, NumTokensResponse},
+    msg::{NftExtensionMsg, NftInfoResponse, NumTokensResponse},
     receiver::Cw721ReceiveMsg,
+    state::Trait,
     DefaultOptionalCollectionExtensionMsg, DefaultOptionalNftExtension,
     DefaultOptionalNftExtensionMsg,
 };
@@ -23,7 +24,7 @@ use ics721_types::{
 
 use crate::{
     error::ContractError,
-    msg::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg},
+    msg::{CallbackData, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg},
     state::{
         ADDR_CW721, ADDR_ICS721, ADDR_POAP, COUNTERPARTY_CONTRACT, DEFAULT_TOKEN_URI,
         ESCROWED_TOKEN_URI, TRANSFERRED_TOKEN_URI,
@@ -107,7 +108,39 @@ fn create_mint_msg(deps: DepsMut, cw721: Addr, owner: String) -> Result<SubMsg, 
         >::NumTokens {},
     )?;
 
-    let token_uri = DEFAULT_TOKEN_URI.load(deps.storage)?;
+    let default_token_uri = DEFAULT_TOKEN_URI.load(deps.storage)?;
+    let escrowed_token_uri = ESCROWED_TOKEN_URI.load(deps.storage)?;
+    let transferred_token_uri = TRANSFERRED_TOKEN_URI.load(deps.storage)?;
+    let trait_token_uri = Trait {
+        display_type: None,
+        trait_type: "token_uri".to_string(),
+        value: default_token_uri.clone(),
+    };
+    let trait_default_uri = Trait {
+        display_type: None,
+        trait_type: "default_uri".to_string(),
+        value: default_token_uri.clone(),
+    };
+    let trait_escrowed_uri = Trait {
+        display_type: None,
+        trait_type: "escrowed_uri".to_string(),
+        value: escrowed_token_uri.clone(),
+    };
+    let trait_transferred_uri = Trait {
+        display_type: None,
+        trait_type: "transferred_uri".to_string(),
+        value: transferred_token_uri.clone(),
+    };
+    let extension = Some(NftExtensionMsg {
+        image: Some(Some(default_token_uri.clone())),
+        attributes: Some(Some(vec![
+            trait_token_uri,
+            trait_default_uri,
+            trait_escrowed_uri,
+            trait_transferred_uri,
+        ])),
+        ..Default::default()
+    });
     let mint_msg = WasmMsg::Execute {
         contract_addr: cw721.to_string(),
         msg: to_json_binary(&cw721_base::msg::ExecuteMsg::<
@@ -117,8 +150,8 @@ fn create_mint_msg(deps: DepsMut, cw721: Addr, owner: String) -> Result<SubMsg, 
         >::Mint {
             token_id: num_tokens.count.to_string(),
             owner,
-            token_uri: Some(token_uri),
-            extension: None,
+            token_uri: Some(default_token_uri.clone()),
+            extension,
         })?,
         funds: vec![],
     };
@@ -173,15 +206,24 @@ fn create_memo(
     sender: String,
     token_id: String,
 ) -> Result<Ics721Memo, ContractError> {
-    let callback_msg = CallbackMsg { sender, token_id };
+    let default_token_uri = DEFAULT_TOKEN_URI.load(storage)?;
+    let escrowed_token_uri = ESCROWED_TOKEN_URI.load(storage)?;
+    let transferred_token_uri = TRANSFERRED_TOKEN_URI.load(storage)?;
+    let callback_data = CallbackData {
+        sender,
+        token_id,
+        default_token_uri,
+        escrowed_token_uri,
+        transferred_token_uri,
+    };
     let mut callbacks = Ics721Callbacks {
-        ack_callback_data: Some(to_json_binary(&callback_msg)?),
+        ack_callback_data: Some(to_json_binary(&callback_data)?),
         ack_callback_addr: Some(env.contract.address.to_string()),
         receive_callback_data: None,
         receive_callback_addr: None,
     };
     if let Some(counterparty_contract) = COUNTERPARTY_CONTRACT.may_load(storage)? {
-        callbacks.receive_callback_data = Some(to_json_binary(&callback_msg)?);
+        callbacks.receive_callback_data = Some(to_json_binary(&callback_data)?);
         callbacks.receive_callback_addr = Some(counterparty_contract); // here we need to set contract addr, since receiver is NFT receiver
     }
     Ok(Ics721Memo {
@@ -206,24 +248,34 @@ fn execute_receive_callback(
     // 2. mints a poap to the receiver
 
     // ========= 1. change token uri
-    let CallbackMsg { token_id, sender } = from_json(msg.msg)?;
-    let transferred_token_uri = TRANSFERRED_TOKEN_URI.load(deps.storage)?;
-    let update_nft_info = create_update_nft_info_msg(
+    let callback_data: CallbackData = from_json(msg.msg)?;
+    let (update_nft_info, old_token_uri, new_token_uri) = create_update_nft_info_msg(
         deps.as_ref(),
         msg.nft_contract,
-        token_id.clone(),
-        transferred_token_uri,
+        callback_data.clone(),
+        false,
     )?;
     // ========= 2. mint poap
     let poap = ADDR_POAP.load(deps.storage)?;
     let mint_poap = create_mint_msg(deps, poap, msg.original_packet.receiver)?;
 
     Ok(Response::default()
+        .add_attribute("method", "execute_receive_callback")
+        .add_attribute("token_id", callback_data.token_id)
+        .add_attribute("sender", callback_data.sender)
         .add_message(update_nft_info)
         .add_submessage(mint_poap)
-        .add_attribute("method", "execute_receive_callback")
-        .add_attribute("token_id", token_id)
-        .add_attribute("sender", sender))
+        .add_attribute("new_token_uri", new_token_uri)
+        .add_attribute("old_token_uri", old_token_uri.clone())
+        .add_attribute("default_token_uri", callback_data.default_token_uri.clone())
+        .add_attribute(
+            "escrowed_token_uri",
+            callback_data.escrowed_token_uri.clone(),
+        )
+        .add_attribute(
+            "transferred_token_uri",
+            callback_data.transferred_token_uri.clone(),
+        ))
 }
 
 /// Updates NftInfo with new token uri on both, source (ack) and target (receive) chain.
@@ -235,30 +287,98 @@ fn execute_receive_callback(
 fn create_update_nft_info_msg(
     deps: Deps,
     cw721: String,
-    token_id: String,
-    escrowed_or_transferred_token_uri: String,
-) -> Result<WasmMsg, ContractError> {
-    // - get nft info
-    let all_nft_info: AllNftInfoResponse<DefaultOptionalNftExtension> =
-        deps.querier.query_wasm_smart(
-            cw721.clone(),
-            &cw721_base::msg::QueryMsg::<
-                DefaultOptionalNftExtensionMsg,
-                DefaultOptionalCollectionExtensionMsg,
-                Empty,
-            >::AllNftInfo {
-                token_id: token_id.clone(),
-                include_expired: None,
-            },
-        )?;
-    let current_token_uri = all_nft_info.info.token_uri.unwrap(); // unwrap is safe here, since we set token_uri during mint
-                                                                  // check if token uri is escrowed
-    let default_token_uri = DEFAULT_TOKEN_URI.load(deps.storage)?;
+    callback_data: CallbackData,
+    use_escrowed_uri: bool,
+) -> Result<(WasmMsg, String, String), ContractError> {
+    // check if token uri is unchanged ( holds default token uri)
+    let nft_info: NftInfoResponse<DefaultOptionalNftExtension> = deps.querier.query_wasm_smart(
+        cw721.clone(),
+        &cw721_base::msg::QueryMsg::<
+            DefaultOptionalNftExtensionMsg,
+            DefaultOptionalCollectionExtensionMsg,
+            Empty,
+        >::NftInfo {
+            token_id: callback_data.token_id.clone(),
+        },
+    )?;
+    // currently ics721 does not store onchain metadata, so source for URIs are:
+    // - forward transfer: URIs in callback
+    // - back transfer: URIs in nft extension/onchain metadata
+    let (default_token_uri, escrowed_token_uri, transferred_token_uri) =
+        if let Some(extension) = nft_info.extension {
+            if let Some(attributes) = extension.attributes {
+                let default_token_uri = attributes
+                    .clone()
+                    .into_iter()
+                    .find(|attribute| attribute.trait_type == "default_uri")
+                    .map(|a| a.value)
+                    .unwrap_or(callback_data.default_token_uri.clone());
+                let escrowed_token_uri = attributes
+                    .clone()
+                    .into_iter()
+                    .find(|attribute| attribute.trait_type == "escrowed_uri")
+                    .map(|a| a.value)
+                    .unwrap_or(callback_data.escrowed_token_uri.clone());
+                let transferred_token_uri = attributes
+                    .into_iter()
+                    .find(|attribute| attribute.trait_type == "transferred_uri")
+                    .map(|a| a.value)
+                    .unwrap_or(callback_data.transferred_token_uri.clone());
+                (default_token_uri, escrowed_token_uri, transferred_token_uri)
+            } else {
+                (
+                    callback_data.default_token_uri.clone(),
+                    callback_data.escrowed_token_uri.clone(),
+                    callback_data.transferred_token_uri.clone(),
+                )
+            }
+        } else {
+            (
+                callback_data.default_token_uri.clone(),
+                callback_data.escrowed_token_uri.clone(),
+                callback_data.transferred_token_uri.clone(),
+            )
+        };
+    let current_token_uri = nft_info.token_uri.unwrap(); // safe to unwrap, since it is set in mint
     let new_token_uri = if current_token_uri == default_token_uri {
-        escrowed_or_transferred_token_uri
+        if use_escrowed_uri {
+            escrowed_token_uri.clone()
+        } else {
+            transferred_token_uri.clone()
+        }
     } else {
-        default_token_uri
+        default_token_uri.clone()
     };
+    let trait_token_uri = Trait {
+        display_type: None,
+        trait_type: "token_uri".to_string(),
+        value: new_token_uri.clone(),
+    };
+    let trait_default_uri = Trait {
+        display_type: None,
+        trait_type: "default_uri".to_string(),
+        value: default_token_uri.clone(),
+    };
+    let trait_escrowed_uri = Trait {
+        display_type: None,
+        trait_type: "escrowed_uri".to_string(),
+        value: escrowed_token_uri.clone(),
+    };
+    let trait_transferred_uri = Trait {
+        display_type: None,
+        trait_type: "transferred_uri".to_string(),
+        value: transferred_token_uri.clone(),
+    };
+    let extension = Some(NftExtensionMsg {
+        image: Some(Some(new_token_uri.clone())),
+        attributes: Some(Some(vec![
+            trait_token_uri,
+            trait_default_uri,
+            trait_escrowed_uri,
+            trait_transferred_uri,
+        ])),
+        ..Default::default()
+    });
     // - set new token uri
     let update_nft_info: WasmMsg = WasmMsg::Execute {
         contract_addr: cw721,
@@ -267,13 +387,13 @@ fn create_update_nft_info_msg(
             DefaultOptionalCollectionExtensionMsg,
             Empty,
         >::UpdateNftInfo {
-            token_id: token_id.clone(),
-            token_uri: Some(Some(new_token_uri)),
-            extension: None,
+            token_id: callback_data.token_id.clone(),
+            token_uri: Some(Some(new_token_uri.clone())),
+            extension,
         })?,
         funds: vec![],
     };
-    Ok(update_nft_info)
+    Ok((update_nft_info, current_token_uri, new_token_uri))
 }
 
 fn execute_ack_callback(
@@ -288,21 +408,33 @@ fn execute_ack_callback(
         return Err(ContractError::UnauthorizedCallback {});
     }
 
-    let CallbackMsg { token_id, sender } = from_json(&msg.msg)?;
+    let callback_data: CallbackData = from_json(&msg.msg)?;
+
     let res = Response::default()
         .add_attribute("method", "execute_ack_callback")
-        .add_attribute("token_id", token_id.clone())
-        .add_attribute("sender", sender);
+        .add_attribute("default_token_uri", callback_data.default_token_uri.clone())
+        .add_attribute(
+            "escrowed_token_uri",
+            callback_data.escrowed_token_uri.clone(),
+        )
+        .add_attribute(
+            "transferred_token_uri",
+            callback_data.transferred_token_uri.clone(),
+        )
+        .add_attribute("token_id", callback_data.token_id.clone())
+        .add_attribute("sender", callback_data.sender.clone());
     match msg.status {
         Ics721Status::Success => {
-            let escrowed_token_uri = ESCROWED_TOKEN_URI.load(deps.storage)?;
-            let update_nft_info = create_update_nft_info_msg(
+            let (update_nft_info, old_token_uri, new_token_uri) = create_update_nft_info_msg(
                 deps.as_ref(),
                 msg.nft_contract,
-                token_id,
-                escrowed_token_uri,
+                callback_data.clone(),
+                true,
             )?;
-            Ok(res.add_message(update_nft_info))
+            Ok(res
+                .add_message(update_nft_info)
+                .add_attribute("old_token_uri", old_token_uri)
+                .add_attribute("new_token_uri", new_token_uri))
         }
         Ics721Status::Failed(error) => Ok(res.add_attribute("error", error)),
     }

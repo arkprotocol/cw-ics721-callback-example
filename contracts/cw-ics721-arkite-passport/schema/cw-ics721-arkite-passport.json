@@ -483,6 +483,26 @@
         "properties": {
           "with_update": {
             "type": "object",
+            "properties": {
+              "default_token_uri": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "escrowed_token_uri": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "transferred_token_uri": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
             "additionalProperties": false
           }
         },

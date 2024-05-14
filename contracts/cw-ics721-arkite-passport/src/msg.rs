@@ -56,8 +56,12 @@ pub enum MigrateMsg {
 }
 
 #[cw_serde]
-pub struct CallbackMsg {
+pub struct CallbackData {
     pub token_id: String,
     /// NFT owner on source chain, on ack this sender also receives a POAP
     pub sender: String,
+    // currently ics721 does not handle onchain metadata, so we pass it here
+    pub default_token_uri: String,
+    pub escrowed_token_uri: String,
+    pub transferred_token_uri: String,
 }

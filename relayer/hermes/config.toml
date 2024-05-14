@@ -154,7 +154,7 @@ denom = 'ustars'
 policy = 'allow'
 list = [
   # Stargaze ICS721 channels
-  ['wasm.stars1usdhus73xz606gnh9fuffxwwyd6x3nyytnfuu05d43zqnfhpn25q4n2dge', 'channel-916'],
+  ['wasm.stars1qsnggmry7h6wt9du0yhdknz4jvxt2csh6dcp4pgx7j35yyhc55csnpgsc3', 'channel-947'],
 ]
 
 [chains.packet_filter.min_fees]
@@ -165,8 +165,8 @@ derivation = 'cosmos'
 [[chains]]
 id = "osmo-test-5"
 type = "CosmosSdk"
-rpc_addr = "https://rpc.osmotest5.osmosis.zone:443" # "osmosis-testnet-rpc.polkachu.com:443"
-grpc_addr = "https://g-osmosis-testnet--ya8hk963cqhlnxexx6zqb8zmzrn5hs70.gw.notionalapi.net" # "https://grpc.osmotest5.osmosis.zone"
+rpc_addr = "https://rpc.osmotest5.osmosis.zone" # "https://rpc.osmotest5.osmosis.zone:443" "https://rpc.osmo.test.yieldpay.finance:443" "osmosis-testnet-rpc.polkachu.com:443"
+grpc_addr = "https://grpc.osmo.test.yieldpay.finance:443" # "https://grpc.osmotest5.osmosis.zone" "https://grpc.osmo.test.yieldpay.finance:443"
 rpc_timeout = "10s"
 # trusted_node = false
 account_prefix = "osmo"
@@ -174,7 +174,7 @@ key_name = "osmosis_ark_relayer"
 key_store_type = "Test"
 store_prefix = "ibc"
 default_gas = 100000
-max_gas = 1500000
+max_gas = 4000000
 gas_multiplier = 1.3
 max_msg_num = 30
 max_tx_size = 180000
@@ -189,7 +189,7 @@ sequential_batch_tx = false
 
 [chains.event_source]
 mode = "push"
-url = "wss://rpc.osmotest5.osmosis.zone/websocket"
+url = "wss://rpc.osmo.test.yieldpay.finance/websocket"
 batch_delay = "500ms"
 
 [chains.trust_threshold]
@@ -204,7 +204,7 @@ denom = "uosmo"
 policy = "allow"
 list = [
   # Osmosis ICS721 channels
-  ['wasm.osmo1zuxzdev6a84muudzgr52ut93g0demlnnt0qchu8q9ym87fzmsrlqv3e0ue', 'channel-7787'],
+  ['wasm.osmo1dmq9t48uauuu2c9lgeed3jymkngsyjvk5rrdg20rktdpnseck0dseh9djq', 'channel-7866'],
 ]
 
 [chains.packet_filter.min_fees]
