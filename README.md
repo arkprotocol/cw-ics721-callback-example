@@ -2,7 +2,7 @@
 
 ## About Ark Protocol
 
-Our mission:
+Mission:
 
 > Building an InterChain NFT Hub. Technically this means:
 >
@@ -29,6 +29,8 @@ Ark Protocol is the main contributor for `cw-ics721` and `cw-nfts`. Recent utili
 
 ## Demo
 
+All contracts are deployed on Stargaze and Osmosis testnet. There are deployment scripts described in  [scripts/SETUP.md](./scripts/SETUP.md).
+
 This is a full example demoing how cw721 interacts with ics721, incoming, and outgoing proxies.
 
 Demo will show how NFT and its metadata are affected using callbacks:
@@ -37,7 +39,9 @@ Demo will show how NFT and its metadata are affected using callbacks:
 2. Transferring NFT to Stargaze
 3. Transferring Back to Osmosis
 
-All contracts are deployed on Stargaze and Osmosis testnet. There are deployment scripts described in  [scripts/SETUP.md](./scripts/SETUP.md).
+## Kudos
+
+Special thanks to Ilo and the GraviDao team. PFPs have been provided by them.
 
 ### Minting an NFT on Osmosis
 
@@ -120,4 +124,3 @@ The workflow for transferring an NFT from Stargaze to Osmosis is:
 - cw-ics721 repo: https://github.com/public-awesome/cw-ics721
 - ics721-plus repo (private): https://github.com/arkprotocol/ics721-plus
 - cw-ics721-proxy repo: https://github.com/arkprotocol/cw-ics721-proxy
-- 
