@@ -5,16 +5,17 @@
 Our mission:
 
 > Building an InterChain NFT Hub. Technically this means:
+>
 > Transitioning NFT utlities from a local, single-chain to a global and interchain level (like transfers, staking, snapshots, launchpads, marketplace, ...).
 
-Ark Protocol is the main contributor for `cw-ics721` and `cw-nfts`. Recent utilities we have provided:
+Ark Protocol is the main contributor for `cw-ics721` and `cw-nfts`. Recent utilities we have provided are:
 
 - ics721
-  - interchain transfers (obviously)
-  - outgoing and incoming proxies for additional security
-  - callbacks
+  - InterChain transfers (obviously)
+  - outgoing and incoming proxies for additional security (like whitelisting IBC channels)
+  - receive and ack callbacks
 - cw-nfts
-  - `cw721-expiration`: NFTs expires after a given duration (e.g. 1 year) - useful for subscriptions and services
+  - [cw721-expiration](https://github.com/CosmWasm/cw-nfts/tree/main/contracts/cw721-expiration): for issuing time-based subscriptions and services
   - upcoming major [v0.19 release](https://github.com/CosmWasm/cw-nfts/pull/156)
     - main logic moved to `cw721` package for re-use
     - distinction between `creator` and `minter`
@@ -24,7 +25,7 @@ Ark Protocol is the main contributor for `cw-ics721` and `cw-nfts`. Recent utili
 - more interchain utilities coming soon:
   - interchain launchpad and marketplace,
   - ics721 v2 (onchain metadata, royalties, single-hop-only transfers, ...)
-  - widgets and APIs...
+  - widgets, Sylvia, and APIs...
 
 ## Demo
 
@@ -46,21 +47,24 @@ A minted NFT looks like this on Osmosis (source/home chain):
 
 ### Transferring NFT to Stargaze
 
-After NFT is transferred over to Stargaze, NFT on Osmosis is escrowed, and its metadata data are changed:
+After NFT is transferred over to Stargaze, NFT on Osmosis is escrowed, and its metadata data is updated:
 
 ![transfer, home chain](https://github.com/arkprotocol/cw-ics721-callback-example/blob/main/public/passport_osmosis02_away.png?raw=true)
+Note: PFP has changed from `home` to `escrowed` PFP!
 
-On the other, an NFT is minted by ICS721 on Stargaze (target/sub chain):
+On the target/sub chain, an NFT is minted by ICS721 on Stargaze:
 
 ![transfer, sub chain](https://github.com/arkprotocol/cw-ics721-callback-example/blob/main/public/passport_osmosis03_transferred.png?raw=true)
+Note: PFP has changed from `home` to `transferred` PFP!
 
-Please note, that ics721 transfers PFP as provided by the collection on the home chain. PFPs on both chains are updated, using callbacks!
+Please also note, that ics721 transfers NFT data `as-is` (as provided by the collection on the home chain). PFPs on both chains are updated, using callbacks!
 
 ### Transferring Back to Osmosis
 
 Transferring an NFT back to home chain, leads to NFT being burned on subchain/Stargaze, and callback resetting PFP on home chain:
 
 ![backtransfer](https://github.com/arkprotocol/cw-ics721-callback-example/blob/main/public/passport_osmosis01_home.png?raw=true)
+Note: PFP has resetted back `home` PFP!
 
 ### Scripts for Testing
 
