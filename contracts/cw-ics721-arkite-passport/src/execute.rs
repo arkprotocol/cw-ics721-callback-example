@@ -178,8 +178,6 @@ fn execute_receive_nft(
     let memo = create_memo(deps.storage, env, msg.sender, msg.token_id.clone())?;
     ibc_msg.memo = Some(Binary::to_base64(&to_json_binary(&memo)?));
     // forward nft to ics721 or outgoing proxy
-    // TODO: instead of `SendNFT``, do a `TransferNft` and `Cw721ReceiveMsg` containing sender on ics721, otherwise
-    // in case of ack fail, NFT is send back to contract and not sender
     let cw721 = info.sender;
     let send_msg = WasmMsg::Execute {
         contract_addr: cw721.to_string(),
@@ -440,20 +438,20 @@ fn execute_ack_callback(
         }
         Ics721Status::Failed(error) => {
             // TODO: transfer NFT back to sender
-            // let transfer_msg = WasmMsg::Execute {
-            //     contract_addr: msg.nft_contract.to_string(),
-            //     msg: to_json_binary(&cw721_base::msg::ExecuteMsg::<
-            //         DefaultOptionalNftExtensionMsg,
-            //         DefaultOptionalCollectionExtensionMsg,
-            //         Empty,
-            //     >::TransferNft {
-            //         recipient: callback_data.sender,
-            //         token_id: callback_data.token_id,
-            //     })?,
-            //     funds: vec![],
-            // };
+            let transfer_msg = WasmMsg::Execute {
+                contract_addr: msg.nft_contract.to_string(),
+                msg: to_json_binary(&cw721_base::msg::ExecuteMsg::<
+                    DefaultOptionalNftExtensionMsg,
+                    DefaultOptionalCollectionExtensionMsg,
+                    Empty,
+                >::TransferNft {
+                    recipient: callback_data.sender,
+                    token_id: callback_data.token_id,
+                })?,
+                funds: vec![],
+            };
 
-            Ok(res.add_attribute("error", error))
+            Ok(res.add_message(transfer_msg).add_attribute("error", error))
         }
     }
 }

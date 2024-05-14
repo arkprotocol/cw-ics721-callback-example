@@ -2,7 +2,7 @@
 
 For the Arkite Passport example these smart contracts have been deployed on Stargaze and Osmosis testnet:
 
-- cw_ics721_arkite_passport.wasm: checksum 590219b6d391c7e634641891c9fc7c46130a5ae5bb33b8084feb9d83927b606c
+- cw_ics721_arkite_passport.wasm: checksum 7d8bb7ad0dddf8803bc739017aebc5dcab9435a8059d2adfb62310f0c6fd9415
 - ics721_base.wasm: checksum cc2aa1c858e4edc6e07b92a096b5397e2b375a111f62068177bc942bc9a65315
 - cw721_base.wasm: checksum bf1652988c7a633969221ccdd7d2dcb04cfa3081af31db4478d01e9dcdccda02
 - cw_ics721_incoming_proxy_base.wasm: checksum 32dd48b27688b4f7783bccd506006b6c0754db79deccca92a9db13d8e4aa7355
@@ -68,8 +68,13 @@ Setup relayer:
 # restore keys, using same mnemonic from passport
 source ./scripts/osmosis.env
 hermes --config ./relayer/hermes/config.toml keys add --key-name osmosis_ark_relayer --chain $CHAIN_ID --mnemonic-file ./scripts/passport.mnemonic
+rly --home ./relayer/cosmos keys restore osmosistestnet default "$(cat ./scripts/passport.mnemonic)"
 source ./scripts/stargaze.env
 hermes --config ./relayer/hermes/config.toml keys add --key-name stargaze_ark_relayer --chain $CHAIN_ID --mnemonic-file ./scripts/passport.mnemonic
+rly --home ./relayer/cosmos keys restore stargazetestnet default "$(cat ./scripts/passport.mnemonic)"
+
+# start cosmos relayer
+rly --home ./relayer/cosmos start --time-threshold 4h # auto update client every 4 hours
 
 # create IBC client, connection, and channel for ics721
 # NOTE: there is no script for this rn, so channel-id must be manually updated in env files

@@ -155,6 +155,7 @@ policy = 'allow'
 list = [
   # Stargaze ICS721 channels
   ['wasm.stars1qsnggmry7h6wt9du0yhdknz4jvxt2csh6dcp4pgx7j35yyhc55csnpgsc3', 'channel-947'],
+  ['wasm.stars1qsnggmry7h6wt9du0yhdknz4jvxt2csh6dcp4pgx7j35yyhc55csnpgsc3', 'channel-948'], # not WLed in incoming proxy
 ]
 
 [chains.packet_filter.min_fees]
@@ -165,7 +166,7 @@ derivation = 'cosmos'
 [[chains]]
 id = "osmo-test-5"
 type = "CosmosSdk"
-rpc_addr = "https://rpc.osmotest5.osmosis.zone" # "https://rpc.osmotest5.osmosis.zone:443" "https://rpc.osmo.test.yieldpay.finance:443" "osmosis-testnet-rpc.polkachu.com:443"
+rpc_addr = "https://rpc.osmo.test.yieldpay.finance:443" # "https://rpc.osmotest5.osmosis.zone:443" "https://rpc.osmo.test.yieldpay.finance:443" "osmosis-testnet-rpc.polkachu.com:443"
 grpc_addr = "https://grpc.osmo.test.yieldpay.finance:443" # "https://grpc.osmotest5.osmosis.zone" "https://grpc.osmo.test.yieldpay.finance:443"
 rpc_timeout = "10s"
 # trusted_node = false
@@ -205,6 +206,7 @@ policy = "allow"
 list = [
   # Osmosis ICS721 channels
   ['wasm.osmo1dmq9t48uauuu2c9lgeed3jymkngsyjvk5rrdg20rktdpnseck0dseh9djq', 'channel-7866'],
+  ['wasm.osmo1dmq9t48uauuu2c9lgeed3jymkngsyjvk5rrdg20rktdpnseck0dseh9djq', 'channel-7877'], # not WLed in incoming proxy
 ]
 
 [chains.packet_filter.min_fees]

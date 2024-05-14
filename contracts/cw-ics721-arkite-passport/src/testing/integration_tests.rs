@@ -5,6 +5,7 @@ use cosmwasm_std::{
 };
 use cw721_base::{
     msg::{AllNftInfoResponse, InstantiateMsg as Cw721InstantiateMsg, NumTokensResponse},
+    receiver::Cw721ReceiveMsg,
     DefaultOptionalCollectionExtension, DefaultOptionalCollectionExtensionMsg,
     DefaultOptionalNftExtension, DefaultOptionalNftExtensionMsg, Ownership,
 };
@@ -221,7 +222,7 @@ impl Test {
                 code_id_outgoing_proxy,
                 creator.clone(),
                 &cw_ics721_outgoing_proxy_rate_limit::msg::InstantiateMsg {
-                    rate_limit: cw_ics721_outgoing_proxy_rate_limit::Rate::PerBlock(10),
+                    rate_limit: cw_ics721_outgoing_proxy_rate_limit::Rate::PerBlock(1),
                     origin: Some(addr_ics721_contract.to_string()),
                 },
                 &[],
@@ -512,6 +513,33 @@ impl Test {
                 token_id,
                 msg: to_json_binary(&ibc_outgoing_msg).unwrap(),
             },
+            &[],
+        )
+    }
+
+    fn execute_arkite_receive_nft(
+        &mut self,
+        token_id: String,
+        receiver: String,
+        channel_id: String,
+    ) -> Result<AppResponse, anyhow::Error> {
+        let ibc_outgoing_msg = IbcOutgoingMsg {
+            receiver,
+            channel_id,
+            timeout: IbcTimeout::with_timestamp(Timestamp::from_seconds(0)),
+            memo: None,
+        };
+
+        let receive_msg = Cw721ReceiveMsg {
+            sender: self.nft_owner.to_string(),
+            token_id: token_id.clone(),
+            msg: to_json_binary(&ibc_outgoing_msg).unwrap(),
+        };
+
+        self.app.execute_contract(
+            self.addr_cw721_contract.clone(), // pretend cw721 is sending
+            self.addr_arkite_contract.clone(),
+            &ExecuteMsg::ReceiveNft(receive_msg),
             &[],
         )
     }
@@ -884,8 +912,8 @@ fn test_ack_callback() {
     // assert ack fail
     {
         let mut test = Test::new();
-        // pretend nft has been escrowed by ics721
-        test.execute_passport_mint(test.addr_ics721_contract.clone())
+        // pretend nft has been returned to arkite
+        test.execute_passport_mint(test.addr_arkite_contract.clone())
             .unwrap();
 
         // process ack
@@ -905,6 +933,11 @@ fn test_ack_callback() {
             test.nft_owner.to_string(),
         )
         .unwrap();
+
+        // assert nft returned to owner
+        let all_nft_info =
+            test.query_cw721_all_nft_info(test.addr_cw721_contract.clone(), "0".to_string());
+        assert_eq!(all_nft_info.access.owner, test.nft_owner);
     }
 }
 
@@ -942,4 +975,38 @@ fn test_migrate() {
             "new transferred token uri".to_string()
         );
     }
+}
+
+#[test]
+
+fn test_receive_nft() {
+    let mut test = Test::new();
+
+    // mint and send nft, pretending arkite received nft
+    test.execute_passport_mint(test.addr_arkite_contract.clone())
+        .unwrap();
+    test.execute_arkite_receive_nft(
+        "0".to_string(),
+        test.addr_arkite_contract.to_string(),
+        WHITELISTED_CHANNEL.to_string(),
+    )
+    .unwrap();
+    // assert nft owned by ics721
+    let all_nft_info =
+        test.query_cw721_all_nft_info(test.addr_cw721_contract.clone(), "0".to_string());
+    assert_eq!(all_nft_info.access.owner, test.addr_ics721_contract);
+
+    // rate limit is 1 NFT per block, so this should fail and NFT returned to arkte - though ics721 returns nft to owner, but is not covered here
+    test.execute_passport_mint(test.addr_arkite_contract.clone())
+        .unwrap();
+    test.execute_arkite_receive_nft(
+        "1".to_string(),
+        test.addr_arkite_contract.to_string(),
+        WHITELISTED_CHANNEL.to_string(),
+    )
+    .unwrap_err();
+    // assert nft owned by arkite
+    let all_nft_info =
+        test.query_cw721_all_nft_info(test.addr_cw721_contract.clone(), "1".to_string());
+    assert_eq!(all_nft_info.access.owner, test.addr_arkite_contract);
 }
