@@ -13,7 +13,11 @@ chains:
       key-directory: ../keys/osmo-test-5
       key: default
       chain-id: osmo-test-5
-      rpc-addr: https://rpc.osmo.test.yieldpay.finance:443 # https://rpc.osmotest5.osmosis.zone:443
+      # often testnet is highly unreliable, often this error occurs: `Internal error: transaction indexing is disabled`
+      # so we need to wait for the transaction to be indexed before packets can be relayed.
+      # Also RPCs for some reason dont work, `rly'' though requires port'. Rn `https://rpc.osmotest5.osmosis.zone:443` works best.
+      # Also if it doesnt work, wait for a while and try again (few hours or next day...).
+      rpc-addr: https://rpc.osmotest5.osmosis.zone:443 # https://rpc.osmo.test.yieldpay.finance:443 # https://rpc.osmotest5.osmosis.zone:443
       account-prefix: osmo
       keyring-backend: test
       gas-adjustment: 1.2

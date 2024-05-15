@@ -82,13 +82,16 @@ fi
 
 TX_HASH=$(echo $OUTPUT | jq -r ".txhash")
 echo "TX_HASH: $TX_HASH"
-sleep 20
+echo "...waiting 30secs for tx to be indexed and included in a block"
+sleep 30
 
 echo "============ relaying packets"
 CMD="hermes --config ./relayer/hermes/config.toml clear packets --chain $CHAIN_ID --channel $CHANNEL_ID --port wasm.$ADDR_ICS721"
 echo $CMD
 eval $CMD
 
+echo "...waiting another 30secs after relayer relayed packets"
+sleep 30
 echo "============ checking NFTs"
 # query source chain for NFT
 # - cw721 query for nft info

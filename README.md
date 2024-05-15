@@ -86,6 +86,17 @@ All scripts are availble in [./scripts](./scripts/):
 
 ```
 
+Some explanation here regarding NFT ownership:
+
+- check ownership
+  - UI: `https://testnet.arkprotocol.io/collections/CW721_ADDRESS/NFT_ID`
+  - CLI: `source ./scripts/osmosis.env;$CLI query wasm contract-state smart $ADDR_CW721 '{"all_nft_info":{"token_id": "35"}}' --chain-id $CHAIN_ID --node $CHAIN_NODE | jq`
+- forward transfer:
+  - NFT on source chain is escrowed/owned by `$ADDR_ICS721`
+  - NFT on target chain is owned by `$WALLET_ARKITE_PASSPORT`
+
+Next, we can test transferring an NFT via a channel that is not whitelisted. For this open [./scripts/transfer.sh](./scripts/transfer.sh) and replace `$CHANNEL_ID` with `$CHANNEL_ID_NOT_WHITELISTED`. Now on transfer an `ack fail` (with `code 5: execution error`) is returned. NFT on source chain is returned back to `$WALLET_ARKITE_PASSPORT`.
+
 ### Contracts
 
 Main contract is [./contracts/cw-ics721-arkite-passport](./contracts/cw-ics721-arkite-passport/). It acts as:
