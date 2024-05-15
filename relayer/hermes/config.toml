@@ -166,7 +166,11 @@ derivation = 'cosmos'
 [[chains]]
 id = "osmo-test-5"
 type = "CosmosSdk"
-rpc_addr = "https://rpc.osmo.test.yieldpay.finance:443" # "https://rpc.osmotest5.osmosis.zone:443" "https://rpc.osmo.test.yieldpay.finance:443" "osmosis-testnet-rpc.polkachu.com:443"
+# often testnet is highly unreliable, often this error occurs: `Internal error: transaction indexing is disabled`
+# so we need to wait for the transaction to be indexed before packets can be relayed.
+# Also RPCs for some reason dont work from time to time, so try using with and without `:443`. Rn `https://rpc.osmotest5.osmosis.zone` works best.
+# Also if it doesnt work, wait for a while and try again (few hours or next day...).
+rpc_addr = "https://rpc.osmotest5.osmosis.zone" # "https://rpc.osmotest5.osmosis.zone:443" "https://rpc.osmo.test.yieldpay.finance:443" "osmosis-testnet-rpc.polkachu.com:443"
 grpc_addr = "https://grpc.osmo.test.yieldpay.finance:443" # "https://grpc.osmotest5.osmosis.zone" "https://grpc.osmo.test.yieldpay.finance:443"
 rpc_timeout = "10s"
 # trusted_node = false

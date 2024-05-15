@@ -86,6 +86,32 @@ All scripts are availble in [./scripts](./scripts/):
 
 ```
 
+Some explanation here regarding NFT ownership:
+
+- check ownership
+  - UI: `https://testnet.arkprotocol.io/collections/CW721_ADDRESS/NFT_ID`
+  - CLI: `source ./scripts/osmosis.env;$CLI query wasm contract-state smart $ADDR_CW721 '{"all_nft_info":{"token_id": "35"}}' --chain-id $CHAIN_ID --node $CHAIN_NODE | jq`
+- forward transfer:
+  - NFT on source chain is escrowed/owned by `$ADDR_ICS721`
+  - NFT on target chain is owned by `$WALLET_ARKITE_PASSPORT`
+
+Next, we can test transferring an NFT via a channel that is not whitelisted. For this open [./scripts/transfer.sh](./scripts/transfer.sh) and replace `$CHANNEL_ID` with `$CHANNEL_ID_NOT_WHITELISTED`. Now on transfer an `ack fail` (with `code 5: execution error`) is returned. NFT on source chain is returned back to `$WALLET_ARKITE_PASSPORT`.
+
+### cw-ics721 Specifics
+
+Ark Protocol has implemented enhanced proxies. All contracts have been audited by SCV. We plan to open source our contracts in the near future - after a certain grace period on mainnet chains.
+Ark's proxies provides addtional securities, like: whitelisting channels, collections, and code hashes.
+
+This way `cw-ics721` secures transferring via:
+
+- safe WLed channels and excluding unknown, unsecure channels
+- avoid fragmentation (e.g. only one channel to each target chain)
+- safe cw721 contracts - by WLing address and code hashes
+- checks on both sides: outbound and inbound NFTs
+
+For the rare case a chain or contracts gets compromised, Ark proxies will de-WL channels, collections either on outbound or inbound or both sides - on all required chains.
+As an additional measure, `cw-ics721` also allows defining a one-time `pauser` address, allowing to halt `cw-ics721` until it is explicitly unpaused again.
+
 ### Contracts
 
 Main contract is [./contracts/cw-ics721-arkite-passport](./contracts/cw-ics721-arkite-passport/). It acts as:
