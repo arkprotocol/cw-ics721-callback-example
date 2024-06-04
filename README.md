@@ -10,22 +10,22 @@ Mission:
 
 Ark Protocol is the main contributor for `cw-ics721` and `cw-nfts`. Recent utilities we have provided are:
 
-- ics721
-  - InterChain transfers (obviously)
-  - outgoing and incoming proxies for additional security (like whitelisting IBC channels)
-  - receive and ack callbacks
-- cw-nfts
-  - [cw721-expiration](https://github.com/CosmWasm/cw-nfts/tree/main/contracts/cw721-expiration): for issuing time-based subscriptions and services
-  - upcoming major [v0.19 release](https://github.com/CosmWasm/cw-nfts/pull/156)
-    - main logic moved to `cw721` package for re-use
-    - distinction between `creator` and `minter`
-    - NEW `CollectionMedata` in `cw721` package
-    - NEW utility: `UpdateNftInfo` and `UpdateCollectionMetadata` msg
+- [ICS 721](https://github.com/cosmos/ibc/tree/main/spec/app/ics-721-nft-transfer)
+  - InterChain transfers
+  - Outgoing and incoming proxies for additional security (e.g., whitelisting IBC channels)
+  - Optional receive and ack callbacks
+- `cw-nfts`
+  - [cw721-expiration](https://github.com/CosmWasm/cw-nfts/tree/main/contracts/cw721-expiration): For issuing time-based subscriptions and services
+  - Upcoming major [v0.19 release](https://github.com/CosmWasm/cw-nfts/pull/156)
+    - Main logic moved to `cw721` package for better re-use
+    - Distinction between `creator` and `minter`
+    - NEW `CollectionInfo` in `cw721` package
+    - NEW utility: `UpdateNftInfo` and `UpdateCollectionInfo` msg
 
-- more interchain utilities coming soon:
-  - interchain launchpad and marketplace,
-  - ics721 v2 (onchain metadata, royalties, single-hop-only transfers, ...)
-  - widgets, Sylvia, and APIs...
+- More InterChain utilities coming soon:
+  - InterChain launchpad
+  - InterChain marketplace
+  - `cw-ics721` v2 (onchain metadata, royalties, single-hop-only transfers, etc.)
 
 ## Demo
 
@@ -33,7 +33,7 @@ All contracts are deployed on Stargaze and Osmosis testnet. There are deployment
 
 This is a full example demoing how cw721 interacts with ics721, incoming, and outgoing proxies.
 
-Demo will show how NFT and its metadata are affected using callbacks:
+Demo will show how NFT and its metadata are affected using callbacks during InterChain (aka ics721) transfers:
 
 1. Minting an NFT on Osmosis
 2. Transferring NFT to Stargaze

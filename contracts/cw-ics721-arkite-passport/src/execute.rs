@@ -437,7 +437,6 @@ fn execute_ack_callback(
                 .add_attribute("new_token_uri", new_token_uri))
         }
         Ics721Status::Failed(error) => {
-            // TODO: transfer NFT back to sender
             let transfer_msg = WasmMsg::Execute {
                 contract_addr: msg.nft_contract.to_string(),
                 msg: to_json_binary(&cw721_base::msg::ExecuteMsg::<
