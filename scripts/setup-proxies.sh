@@ -63,13 +63,14 @@ for ENV in "osmosis" "stargaze"; do
     echo $CMD
     eval $CMD
 
-    echo "============ migrating ics721 with proxies"
+    echo "============ migrating ics721 with proxies, wallet ($ADDR_ARKITE_PASSPORT) as pauser and arkite contract ($ADDR_ARKITE_PASSPORT) as cw721_admin"
     MSG="'{\"with_update\":{
 \"incoming_proxy\": \"$ADDR_INCOMING_PROXY\",
 \"outgoing_proxy\": \"$ADDR_OUTGOING_PROXY\",
 \"cw721_base_code_id\": $CODE_ID_CW721,
 \"pauser\": \"$WALLET_ARKITE_PASSPORT\",
-\"cw721_admin\": \"$WALLET_ARKITE_PASSPORT\"
+\"cw721_admin\": \"$WALLET_ARKITE_PASSPORT\",
+\"cw721_creator\": \"$ADDR_ARKITE_PASSPORT\"
 }}'"
     CMD="$CLI tx wasm migrate $ADDR_ICS721 $CODE_ID_ICS721 "$MSG" --from $WALLET_ARKITE_PASSPORT --gas-prices $CLI_GAS_PRICES --gas $CLI_GAS --gas-adjustment $CLI_GAS_ADJUSTMENT -b $CLI_BROADCAST_MODE --yes --node $CHAIN_NODE --chain-id $CHAIN_ID --output $CLI_OUTPUT"
     echo "executing cmd: $CMD" >&2

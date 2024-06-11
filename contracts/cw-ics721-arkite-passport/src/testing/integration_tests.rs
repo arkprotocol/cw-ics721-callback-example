@@ -189,6 +189,8 @@ impl Test {
                             outgoing_proxy: None,
                             pauser: Some(creator.to_string()),
                             cw721_admin: None,
+                            cw721_creator: None,
+                            contract_addr_length: None,
                         })
                         .unwrap(),
                         code_id: code_id_ics721,
@@ -254,6 +256,8 @@ impl Test {
                 outgoing_proxy: Some(addr_outgoing_proxy_contract.to_string()),
                 pauser: None,
                 cw721_admin: None,
+                cw721_creator: None,
+                contract_addr_length: None,
             },
             code_id_ics721,
         )

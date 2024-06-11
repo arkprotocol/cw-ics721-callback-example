@@ -2,11 +2,11 @@
 
 For the Arkite Passport example these smart contracts have been deployed on Stargaze and Osmosis testnet:
 
-- cw_ics721_arkite_passport.wasm: checksum 7d8bb7ad0dddf8803bc739017aebc5dcab9435a8059d2adfb62310f0c6fd9415
-- ics721_base.wasm: checksum cc2aa1c858e4edc6e07b92a096b5397e2b375a111f62068177bc942bc9a65315
-- cw721_base.wasm: checksum bf1652988c7a633969221ccdd7d2dcb04cfa3081af31db4478d01e9dcdccda02
-- cw_ics721_incoming_proxy_base.wasm: checksum 32dd48b27688b4f7783bccd506006b6c0754db79deccca92a9db13d8e4aa7355
-- cw_ics721_outgoing_proxy_rate_limit.wasm: checksum aae9d990fa4bd4b2d25692c0d6496b52865c64fdb2df3911deb093060871a72f
+- [cw_ics721_arkite_passport.wasm v0.1.1](https://github.com/arkprotocol/cw-ics721-callback-example/releases/tag/v0.1.1): checksum 11a314105955772dfc50c540e24e0559dd14b7d78e9cdcb2dc16817dd41ed40b
+- [ics721_base.wasm](https://github.com/arkprotocol/ark-cw-ics721/tree/instantiate_with_creator): checksum 47c9da625237df793ed5cdbe91a284d03515421abb48612621554db53567e419
+- [cw721_base.wasm](https://github.com/arkprotocol/cw-nfts/tree/collection-info): checksum 312f82835cbbce2cd2b51354d48616c18870845c1fd19f7132c8b373cef23eb6
+- [cw_ics721_incoming_proxy_base.wasm](https://github.com/arkprotocol/cw-ics721-proxy/releases/tag/v0.1.1): checksum 32dd48b27688b4f7783bccd506006b6c0754db79deccca92a9db13d8e4aa7355
+- [cw_ics721_outgoing_proxy_rate_limit.wasm](https://github.com/arkprotocol/cw-ics721-proxy/releases/tag/v0.1.1): checksum aae9d990fa4bd4b2d25692c0d6496b52865c64fdb2df3911deb093060871a72f
 
 For ease-of-use binaries are provided in [scripts](./scripts) folder. Repos can be found here:
 
@@ -41,7 +41,7 @@ For testing, there is no need to re-deploy contracts, except:
 The `arkite-passport` contract must be instantiated first:
 
 ```sh
-./scripts/setup-arkite-passport.sh
+./scripts/setup-contracts.sh
 ```
 
 IMPORTANT: Manually update port in `chains.packet_filter` in `config.toml`!
@@ -77,8 +77,11 @@ rly --home ./relayer/cosmos keys restore stargazetestnet default "$(cat ./script
 rly --home ./relayer/cosmos start --time-threshold 4h # auto update client every 4 hours
 
 # create IBC client, connection, and channel for ics721
-# NOTE: there is no script for this rn, so channel-id must be manually updated in env files
+# NOTE: there is no script for this rn, so channel-id must be manually updated in env, config.toml and config.yaml files
 hermes --config ./relayer/hermes/config.toml --json create channel --a-chain $(source ./scripts/osmosis.env;echo $CHAIN_ID) --a-port wasm.$(source ./scripts/osmosis.env;echo $ADDR_ICS721) --b-port wasm.$(source ./scripts/stargaze.env;echo $ADDR_ICS721) --b-chain $(source ./scripts/stargaze.env;echo $CHAIN_ID) --new-client-connection --channel-version ics721-1 --yes
+# alternative create channel with existing connection (NOTE: client MUST be active):
+hermes --config ./relayer/hermes/config.toml --json create channel --a-chain $(source ./scripts/osmosis.env;echo $CHAIN_ID) --a-port wasm.$(source ./scripts/osmosis.env;echo $ADDR_ICS721) --b-port wasm.$(source ./scripts/stargaze.env;echo $ADDR_ICS721) --a-connection $(source ./scripts/osmosis.env;echo $CONNECTION_ID) --channel-version ics721-1 --yes
+
 # Hermes final output looks like this:
 # {
 #     "result": {
@@ -114,7 +117,7 @@ IMPORTANT: Manually update:
 - CHANNEL_ID in stargaze.env and osmosis.env based on output Hermes results!
 - channel and port in config.toml!
 
-### Proxy Contracts
+### Proxy Contracts and Migrate ICS721
 
 `cw-ics721` allows to set 2 optional proxies:
 
@@ -132,71 +135,9 @@ More upcoming features are in the pipe, like:
 ```sh
 # script does 2 things:
 # - instantiate proxies with WL channel and rate limit of 1 NFT per block
-# - migrate ics721 and set proxies
+# - migrate ics721, set proxies and sets arkite address as pauser and wallet as cw721 admin
 ./scripts/setup-proxies.sh
 ```
-
-### Initial Test Setup
-
-ICS721 controls collection contracts on other chains (than home chain where NFT originates). In latest `cw721-base v0.19` release
-creator is authorised to update `NftInfo` and extension (aka NFT metadata).
-
-In this `arkite-passport` example, `passport` and `poap` collections are created, where `arkite-passport` contract is owner and minter.
-On transfer ics721 also creates a `passport` collection (aka `passport voucher`) on target chain. Here creator and minter is ics721.
-Hence `arkite-passport` wont be able to update NFTs on target chain.
-
-Admin to the rescue - on initial transfer, voucher collection is created.
-
-```sh
-# mint NFT e.g. with output:
-# ...
-# > Minted NFT #0
-# > ============ checking NFT
-# > starsd query wasm contract-state smart stars1acn92n33v56lcrrlvyu0g4n4vc8cjyk69kkdxtugadq24zwduf2s6fp5uq '{"all_nft_info":{"token_id": "0"}}' --chain-id elgafar-1 --node https://rpc.elgafar-1.stargaze-apis.com:443 --output json
-# > ------------------------------------------------------------
-# > stargaze
-# > - nft contract: stars1acn92n33v56lcrrlvyu0g4n4vc8cjyk69kkdxtugadq24zwduf2s6fp5uq
-# > - NFT #0, token uri: ipfs://passport/default, owner: stars1qk0hwv23h2kdsewt92apk62f2v40fla8z8qlth (ics721: stars14uelnppq5vsc3dfp8k3ll68cqrdpcf4nrhns9j0v6jnc6k9hj94skccdmh)
-./scripts/mint.sh stargaze
-
-# interchain transfer NFT and relay, output:
-# > ============ Transferring NFT
-# > ...
-# > ============ relaying packets
-# > ...
-# > 2024-05-10T12:48:31.763936Z  INFO ThreadId(01) relay_recv_packet_and_timeout_messages{src_chain=elgafar-1 src_port=wasm.stars14uelnppq5vsc3dfp8k3ll68cqrdpcf4nrhns9j0v6jnc6k9hj94skccdmh # > src_channel=channel-923 dst_chain=osmo-test-5}:relay{odata=packet-recv ->Destination @1-10430320; len=1}: [Sync->osmo-test-5] result events:
-        UpdateClient(UpdateClient { Attributes { client_id: 07-tendermint-3495, client_type: ClientType(07-tendermint), consensus_height: 1-10430321 } }) at height 5-7445842
-# >         WriteAcknowledgement(WriteAcknowledgement { packet: seq:1, path:channel-923/wasm.stars14uelnppq5vsc3dfp8k3ll68cqrdpcf4nrhns9j0v6jnc6k9hj94skccdmh->channel-7836/wasm.# > osmo1sq5x7mag5mxdkmsv2kw6j7gu3u9m68x4kcdfpwyzlgjergxxjaks7rkc8m, toh:no timeout, tos:2024-05-10T13:48:11.443847Z), ack: [ 123, 34, 114, 101, 115, 117, 108, 116, 34, 58, 34, 77, 81, 61, 61, 34, 125 ] }) at height 5-7445842
-...
-# > ============ checking NFTs
-# > ...
-# > stargaze
-# > - nft contract: stars1acn92n33v56lcrrlvyu0g4n4vc8cjyk69kkdxtugadq24zwduf2s6fp5uq
-# > - NFT #0, token uri: ipfs://passport/escrowed, owner: stars14uelnppq5vsc3dfp8k3ll68cqrdpcf4nrhns9j0v6jnc6k9hj94skccdmh (ics721: stars14uelnppq5vsc3dfp8k3ll68cqrdpcf4nrhns9j0v6jnc6k9hj94skccdmh)
-# > ------------------------------------------------------------
-# > ...
-# > osmosis
-# > - nft contract: osmo17kvvk62qsu97pfz546wvpf84ggvnfaza6x226dt4kfvq3wl96jcqc8d3mx
-# > - NFT #0, token uri: ipfs://passport/default, owner: osmo1qk0hwv23h2kdsewt92apk62f2v40fla87qyjk5 (ics721: osmo1sq5x7mag5mxdkmsv2kw6j7gu3u9m68x4kcdfpwyzlgjergxxjaks7rkc8m)
-# > ------------------------------------------------------------
-./scripts/transfer.sh stargaze 0
-
-# now migrate voucher collection an set arkite-passport as creator
-# - output should show collection with new creator
-./scripts/migrate-cw721-creator.sh osmosis osmo17kvvk62qsu97pfz546wvpf84ggvnfaza6x226dt4kfvq3wl96jcqc8d3mx
-
-# next do the same on other chain:
-./scripts/mint.sh osmosis
-./scripts/transfer.sh osmosis 0
-./scripts/migrate-cw721-creator.sh stargaze stars1dj6sfh7vvn3qu2xzh2qysh7ng432c24rs70qf9xdvcchekwrsneqzgtqya
-
-```
-
-Some notes here:
-
-- if hermes logs `ack: [ 123, 34, 114, 101, 115, 117, 108, 116, 34, 58, 34, 77, 81, 61, 61, 34, 125 ]` (=`{"result":"MQ=="}` ), then relaying was succcessful
-- please note, on initial transfer `token_uri` on target chain is unchanged (=`ipfs://passport/default`)
-- `token_uri` on target chain is unchanged, because there is no counter party contract defined yet for receive callback
 
 Finally, counter party contracts need to be set:
 
@@ -209,27 +150,88 @@ Finally, counter party contracts need to be set:
 ./scripts/setup-counter-party-contracts.sh
 ```
 
-Once set, mint and transfer again - this time `token_uri` will be updated:
+### Initial Test Setup
+
+ICS721 controls collection contracts on other chains (than home chain where NFT originates). In latest `cw721-base v0.19` release
+creator is authorised to update `NftInfo` and extension (aka NFT metadata).
+
+In this `arkite-passport` example, `passport` and `poap` collections are created, where `arkite-passport` contract is minter and creator.
+On transfer ics721 also creates a `passport` collection (aka `passport voucher`) on target chain. Here creator and minter is ics721.
+Hence `arkite-passport` wont be able to update NFTs on target chain.
+
+Admin to the rescue - on initial transfer, voucher collection is created.
 
 ```sh
+# mint NFT e.g. with output:
+# ...
+# > Minted NFT #0
+# > ============ checking NFT
+# > starsd query wasm contract-state smart stars12u499ljeegts85hqx937rpwccuhw48272ke7n7kvkhfznu0ky7mqgz2gv9 '{"all_nft_info":{"token_id": "0"}}' --chain-id elgafar-1 --node https://rpc.elgafar-1.stargaze-apis.com:443 --output json
+# > ------------------------------------------------------------
+# > stargaze
+# > - nft contract: stars12u499ljeegts85hqx937rpwccuhw48272ke7n7kvkhfznu0ky7mqgz2gv9
+# > - NFT #0, token uri: ipfs://passport/default, owner: stars1qk0hwv23h2kdsewt92apk62f2v40fla8z8qlth (ics721: stars14uelnppq5vsc3dfp8k3ll68cqrdpcf4nrhns9j0v6jnc6k9hj94skccdmh)
+./scripts/mint.sh stargaze
+
+# interchain transfer NFT and relay
+./scripts/transfer.sh stargaze 0
+# output:
+# > ============ Transferring NFT
+# > ...
+# > ============ relaying packets
+# > ...
+# > 2024-05-10T12:48:31.763936Z  INFO ThreadId(01) relay_recv_packet_and_timeout_messages{src_chain=elgafar-1 src_port=wasm.stars14uelnppq5vsc3dfp8k3ll68cqrdpcf4nrhns9j0v6jnc6k9hj94skccdmh # > src_channel=channel-923 dst_chain=osmo-test-5}:relay{odata=packet-recv ->Destination @1-10430320; len=1}: [Sync->osmo-test-5] result events:
+        UpdateClient(UpdateClient { Attributes { client_id: 07-tendermint-3495, client_type: ClientType(07-tendermint), consensus_height: 1-10430321 } }) at height 5-7445842
+# >         WriteAcknowledgement(WriteAcknowledgement { packet: seq:1, path:channel-923/wasm.stars14uelnppq5vsc3dfp8k3ll68cqrdpcf4nrhns9j0v6jnc6k9hj94skccdmh->channel-7836/wasm.# > osmo1sq5x7mag5mxdkmsv2kw6j7gu3u9m68x4kcdfpwyzlgjergxxjaks7rkc8m, toh:no timeout, tos:2024-05-10T13:48:11.443847Z), ack: [ 123, 34, 114, 101, 115, 117, 108, 116, 34, 58, 34, 77, 81, 61, 61, 34, 125 ] }) at height 5-7445842
+...
+# > ============ checking NFTs
+# > ...
+# > stargaze
+# > - nft contract: stars12u499ljeegts85hqx937rpwccuhw48272ke7n7kvkhfznu0ky7mqgz2gv9
+# > - NFT #0, token uri: ipfs://passport/escrowed, owner: stars14uelnppq5vsc3dfp8k3ll68cqrdpcf4nrhns9j0v6jnc6k9hj94skccdmh (ics721: stars14uelnppq5vsc3dfp8k3ll68cqrdpcf4nrhns9j0v6jnc6k9hj94skccdmh)
+# > ------------------------------------------------------------
+# > ...
+# > osmosis
+# > - nft contract: osmo189smaj36x85w2ldfvtgc3m2w5fygte2wpk4qp3ttsgneyvmvadesad8dvc
+# > - NFT #0, token uri: ipfs://passport/default, owner: osmo1qk0hwv23h2kdsewt92apk62f2v40fla87qyjk5 (ics721: osmo1sq5x7mag5mxdkmsv2kw6j7gu3u9m68x4kcdfpwyzlgjergxxjaks7rkc8m)
+# > ------------------------------------------------------------
+
+# Now let's do a back transfer:
+./scripts/transfer.sh osmosis 0 osmo189smaj36x85w2ldfvtgc3m2w5fygte2wpk4qp3ttsgneyvmvadesad8dvc
+# output:
+# ...
+# ============ checking NFTs
+# osmosisd query wasm contract-state smart osmo189smaj36x85w2ldfvtgc3m2w5fygte2wpk4qp3ttsgneyvmvadesad8dvc '{"all_nft_info":{"token_id": "0"}}' --chain-id osmo-test-5 --node https://rpc.osmo.test.yieldpay.finance:443 --output json
+# Error: rpc error: code = Unknown desc = type: cw721::state::NftInfo<core::option::Option<cw721::state::NftExtension>>; key: [00, 06, 74, 6F, 6B, 65, 6E, 73, 30] not found: query wasm contract failed: unknown request
+# ------------------------------------------------------------
+# osmosis
+# Failed to upload  to : A0095A925FD114565F531CAC6CA33447DB24BE54E4515B52D470B46999712A55
+# - NFT #0 got burned
+# ------------------------------------------------------------
+# starsd query wasm contract-state smart stars12u499ljeegts85hqx937rpwccuhw48272ke7n7kvkhfznu0ky7mqgz2gv9 '{"all_nft_info":{"token_id": "0"}}' --chain-id elgafar-1 --node https://rpc.elgafar-1.stargaze-apis.com:443 --output json
+# ------------------------------------------------------------
+# stargaze
+# - nft contract: stars12u499ljeegts85hqx937rpwccuhw48272ke7n7kvkhfznu0ky7mqgz2gv9
+# - NFT #0, token uri: https://github.com/arkprotocol/cw-ics721-callback-example/raw/main/public/passport_stargaze01_home.png, owner: stars1qk0hwv23h2kdsewt92apk62f2v40fla8z8qlth (ics721: stars1k6jl2wcgl8uh5h9yp4usxxz0r6pha6myuwvx8mm5l8tqqzpc2xtsp7lgl4)
+# - POAP NFT #1
+# ------------------------------------------------------------
+
+# also try on other chain:
 ./scripts/mint.sh osmosis
-./scripts/transfer.sh osmosis 1
-
+./scripts/transfer.sh osmosis 0
 ```
 
-Result output of above (forward) transfer:
+Some notes here:
 
-- `token_uri` on source chain is: `ipfs://passport/escrowed`
-- `token_uri` on target chain is: `ipfs://passport/transferred`
-
-Now let's do a back transfer:
-
-```sh
-./scripts/transfer.sh stargaze 1 stars1dj6sfh7vvn3qu2xzh2qysh7ng432c24rs70qf9xdvcchekwrsneqzgtqya
-
-```
-
-Result output of above (back) transfer:
-
-- NFT is burned on Stargaze
-- `token_uri` on Osmosis is set back: `ipfs://passport/default`
+- if hermes logs `ack: [ 123, 34, 114, 101, 115, 117, 108, 116, 34, 58, 34, 77, 81, 61, 61, 34, 125 ]` (=`{"result":"MQ=="}` ), then relaying was succcessful
+- `token_uri` on source and target chain are updated during transfer
+  - on initial transfer (e.g. Osmosis -> Stargaze):
+    - in case on target chain is unchanged (=`ipfs://passport/default`)
+    - reason: there is no counter party contract defined yet for receive callback
+    - solution: run `setup-counter-party-contracts.sh`
+    - once proxies are set, transfers triggers callback to counter party contract
+      - `token_uri` on source chain is: `ipfs://passport/escrowed`
+      - `token_uri` on target chain is: `ipfs://passport/transferred`
+  - on back transfer (e.g. Stargaze -> Omosis):
+    - NFT is burned on Stargaze
+    - `token_uri` on Osmosis is set back: `ipfs://passport/default`

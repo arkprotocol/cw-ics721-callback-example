@@ -4,7 +4,7 @@ use std::vec;
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     from_json, to_json_binary, Addr, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Reply,
-    Response, StdResult, Storage, SubMsg, SubMsgResult, WasmMsg,
+    Response, StdResult, Storage, SubMsg, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw721_base::{
@@ -15,6 +15,7 @@ use cw721_base::{
     DefaultOptionalNftExtensionMsg,
 };
 use cw_utils::parse_reply_instantiate_data;
+use ics721::msg::InstantiateMsg as Ics721InstantiateMsg;
 use ics721_types::{
     ibc_types::IbcOutgoingMsg,
     types::{
@@ -30,7 +31,7 @@ use crate::{
         ESCROWED_TOKEN_URI, TRANSFERRED_TOKEN_URI,
     },
     INSTANTIATE_CW721_REPLY_ID, INSTANTIATE_ICS721_REPLY_ID, INSTANTIATE_POAP_REPLY_ID,
-    MINT_NFT_REPLY_ID,
+    MINT_NFT_REPLY_ID, UPDATE_NFT_REPLY_ID,
 };
 
 const CONTRACT_NAME: &str = "crates.io:arkite-passport";
@@ -44,6 +45,12 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    // override and use contract address as creator
+    let mut ics721_base = msg.ics721_base;
+    let mut instantiate_ics721_msg: Ics721InstantiateMsg = from_json(&ics721_base.msg)?;
+    instantiate_ics721_msg.cw721_creator = Some(env.contract.address.to_string());
+    ics721_base.msg = to_json_binary(&instantiate_ics721_msg)?;
+    // reply_on_success: revert TX if it fails
     let sub_msgs: Vec<SubMsg<Empty>> = vec![
         SubMsg::reply_on_success(
             msg.cw721_base.into_wasm_msg(env.clone().contract.address),
@@ -54,7 +61,7 @@ pub fn instantiate(
             INSTANTIATE_POAP_REPLY_ID,
         ),
         SubMsg::reply_on_success(
-            msg.ics721_base.into_wasm_msg(env.clone().contract.address),
+            ics721_base.into_wasm_msg(env.clone().contract.address),
             INSTANTIATE_ICS721_REPLY_ID,
         ),
     ];
@@ -132,13 +139,13 @@ fn create_mint_msg(deps: DepsMut, cw721: Addr, owner: String) -> Result<SubMsg, 
         value: transferred_token_uri.clone(),
     };
     let extension = Some(NftExtensionMsg {
-        image: Some(Some(default_token_uri.clone())),
-        attributes: Some(Some(vec![
+        image: Some(default_token_uri.clone()),
+        attributes: Some(vec![
             trait_token_uri,
             trait_default_uri,
             trait_escrowed_uri,
             trait_transferred_uri,
-        ])),
+        ]),
         ..Default::default()
     });
     let mint_msg = WasmMsg::Execute {
@@ -155,7 +162,7 @@ fn create_mint_msg(deps: DepsMut, cw721: Addr, owner: String) -> Result<SubMsg, 
         })?,
         funds: vec![],
     };
-    let sub_msg = SubMsg::reply_always(mint_msg, MINT_NFT_REPLY_ID);
+    let sub_msg = SubMsg::reply_on_success(mint_msg, MINT_NFT_REPLY_ID); // revert TX if it fails
     Ok(sub_msg)
 }
 
@@ -255,16 +262,20 @@ fn execute_receive_callback(
         callback_data.clone(),
         false,
     )?;
+    let update_sub_msg = SubMsg::reply_on_success(update_nft_info, UPDATE_NFT_REPLY_ID); // revert TX if it fails
+
     // ========= 2. mint poap
     let poap = ADDR_POAP.load(deps.storage)?;
-    let mint_poap = create_mint_msg(deps, poap, msg.original_packet.receiver)?;
+    let sub_msgs = vec![
+        update_sub_msg,
+        create_mint_msg(deps, poap, msg.original_packet.receiver)?,
+    ];
 
     Ok(Response::default()
         .add_attribute("method", "execute_receive_callback")
         .add_attribute("token_id", callback_data.token_id)
         .add_attribute("sender", callback_data.sender)
-        .add_message(update_nft_info)
-        .add_submessage(mint_poap)
+        .add_submessages(sub_msgs)
         .add_attribute("new_token_uri", new_token_uri)
         .add_attribute("old_token_uri", old_token_uri.clone())
         .add_attribute("default_token_uri", callback_data.default_token_uri.clone())
@@ -370,13 +381,13 @@ fn create_update_nft_info_msg(
         value: transferred_token_uri.clone(),
     };
     let extension = Some(NftExtensionMsg {
-        image: Some(Some(new_token_uri.clone())),
-        attributes: Some(Some(vec![
+        image: Some(new_token_uri.clone()),
+        attributes: Some(vec![
             trait_token_uri,
             trait_default_uri,
             trait_escrowed_uri,
             trait_transferred_uri,
-        ])),
+        ]),
         ..Default::default()
     });
     // - set new token uri
@@ -388,7 +399,7 @@ fn create_update_nft_info_msg(
             Empty,
         >::UpdateNftInfo {
             token_id: callback_data.token_id.clone(),
-            token_uri: Some(Some(new_token_uri.clone())),
+            token_uri: Some(new_token_uri.clone()),
             extension,
         })?,
         funds: vec![],
@@ -433,6 +444,7 @@ fn execute_ack_callback(
             )?;
             Ok(res
                 .add_message(update_nft_info)
+                .add_attribute("ics721_status", "ack_success")
                 .add_attribute("old_token_uri", old_token_uri)
                 .add_attribute("new_token_uri", new_token_uri))
         }
@@ -444,13 +456,18 @@ fn execute_ack_callback(
                     DefaultOptionalCollectionExtensionMsg,
                     Empty,
                 >::TransferNft {
-                    recipient: callback_data.sender,
-                    token_id: callback_data.token_id,
+                    recipient: callback_data.sender.clone(),
+                    token_id: callback_data.token_id.clone(),
                 })?,
                 funds: vec![],
             };
 
-            Ok(res.add_message(transfer_msg).add_attribute("error", error))
+            Ok(res
+                .add_message(transfer_msg)
+                .add_attribute("ack_error", error)
+                .add_attribute("ics721_status", "ack_fail")
+                .add_attribute("owner", callback_data.sender)
+                .add_attribute("token_id", callback_data.token_id))
         }
     }
 }
@@ -515,27 +532,31 @@ pub fn reply(deps: DepsMut, _env: Env, reply: Reply) -> Result<Response, Contrac
         .add_attribute("reply_id", reply.id.to_string());
     match reply.id {
         INSTANTIATE_POAP_REPLY_ID => {
-            let res = parse_reply_instantiate_data(reply)?;
+            let res = parse_reply_instantiate_data(reply.clone())?;
             let poap = deps.api.addr_validate(&res.contract_address)?;
             ADDR_POAP.save(deps.storage, &poap)?;
-            Ok(response.add_attribute("addr_poap", poap))
+            Ok(response
+                .add_attribute("method", "sub_msg_instantiate_cw721")
+                .add_attribute("addr_poap", poap))
         }
         INSTANTIATE_CW721_REPLY_ID => {
-            let res = parse_reply_instantiate_data(reply)?;
+            let res = parse_reply_instantiate_data(reply.clone())?;
             let cw721 = deps.api.addr_validate(&res.contract_address)?;
             ADDR_CW721.save(deps.storage, &cw721)?;
-            Ok(response.add_attribute("addr_cw721", cw721))
+            Ok(response
+                .add_attribute("method", "sub_msg_instantiate_cw721")
+                .add_attribute("addr_cw721", cw721))
         }
         INSTANTIATE_ICS721_REPLY_ID => {
-            let res = parse_reply_instantiate_data(reply)?;
+            let res = parse_reply_instantiate_data(reply.clone())?;
             let ics721 = deps.api.addr_validate(&res.contract_address)?;
             ADDR_ICS721.save(deps.storage, &ics721)?;
-            Ok(response.add_attribute("addr_ics721", ics721))
+            Ok(response
+                .add_attribute("method", "sub_msg_instantiate_ics721")
+                .add_attribute("addr_ics721", ics721))
         }
-        MINT_NFT_REPLY_ID => match reply.result {
-            SubMsgResult::Ok(_) => Ok(response),
-            SubMsgResult::Err(error) => Err(ContractError::MintFailed { error }),
-        },
+        MINT_NFT_REPLY_ID => Ok(response.add_attribute("method", "sub_msg_mint_nft")),
+        UPDATE_NFT_REPLY_ID => Ok(response.add_attribute("method", "sub_msg_update_nft")),
         _ => Err(ContractError::UnrecognisedReplyId {}),
     }
 }

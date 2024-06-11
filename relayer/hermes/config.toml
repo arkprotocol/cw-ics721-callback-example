@@ -154,8 +154,8 @@ denom = 'ustars'
 policy = 'allow'
 list = [
   # Stargaze ICS721 channels
-  ['wasm.stars1qsnggmry7h6wt9du0yhdknz4jvxt2csh6dcp4pgx7j35yyhc55csnpgsc3', 'channel-947'],
-  ['wasm.stars1qsnggmry7h6wt9du0yhdknz4jvxt2csh6dcp4pgx7j35yyhc55csnpgsc3', 'channel-948'], # not WLed in incoming proxy
+  ['wasm.stars17urnsung008eypzpkx6scwft9x7948uc3039ltxrygqwq97nq0asyfm2s9', 'channel-967'],
+  ['wasm.stars17urnsung008eypzpkx6scwft9x7948uc3039ltxrygqwq97nq0asyfm2s9', 'channel-968'], # not WLed in incoming proxy
 ]
 
 [chains.packet_filter.min_fees]
@@ -170,7 +170,7 @@ type = "CosmosSdk"
 # so we need to wait for the transaction to be indexed before packets can be relayed.
 # Also RPCs for some reason dont work from time to time, so try using with and without `:443`. Rn `https://rpc.osmotest5.osmosis.zone` works best.
 # Also if it doesnt work, wait for a while and try again (few hours or next day...).
-rpc_addr = "https://rpc.osmotest5.osmosis.zone" # "https://rpc.osmotest5.osmosis.zone:443" "https://rpc.osmo.test.yieldpay.finance:443" "osmosis-testnet-rpc.polkachu.com:443"
+rpc_addr = "https://osmosis-testnet-rpc.polkachu.com:443" # "https://rpc.osmotest5.osmosis.zone:443" "https://rpc.osmo.test.yieldpay.finance:443" "https://osmosis-testnet-rpc.polkachu.com:443"
 grpc_addr = "https://grpc.osmo.test.yieldpay.finance:443" # "https://grpc.osmotest5.osmosis.zone" "https://grpc.osmo.test.yieldpay.finance:443"
 rpc_timeout = "10s"
 # trusted_node = false
@@ -209,8 +209,8 @@ denom = "uosmo"
 policy = "allow"
 list = [
   # Osmosis ICS721 channels
-  ['wasm.osmo1dmq9t48uauuu2c9lgeed3jymkngsyjvk5rrdg20rktdpnseck0dseh9djq', 'channel-7866'],
-  ['wasm.osmo1dmq9t48uauuu2c9lgeed3jymkngsyjvk5rrdg20rktdpnseck0dseh9djq', 'channel-7877'], # not WLed in incoming proxy
+  ['wasm.osmo1pgqueks7m5fw8gjta6kg6slk4qfvdkgavlwnvzwt8d9ejufyz4tssl5j70', 'channel-8016'],
+  ['wasm.osmo1pgqueks7m5fw8gjta6kg6slk4qfvdkgavlwnvzwt8d9ejufyz4tssl5j70', 'channel-8017'], # not WLed in incoming proxy
 ]
 
 [chains.packet_filter.min_fees]

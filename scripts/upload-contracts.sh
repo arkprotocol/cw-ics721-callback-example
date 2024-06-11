@@ -25,7 +25,7 @@ for ENV in "stargaze" "osmosis"; do
             exit $ERROR_CODE
         fi
         echo "============ Waiting for tx $TX_HASH to be included in a block"
-        sleep 10
+        sleep 15
         # get code id from output
         QUERY_OUTPUT=$($CLI q tx $TX_HASH --chain-id $CHAIN_ID --node $CHAIN_NODE --output json)
         CODE_ID=$(echo $QUERY_OUTPUT | jq '.logs[0].events[] | select(.type == "store_code") | .attributes[] | select(.key =="code_id")' | jq -r '.value') &>/dev/null
