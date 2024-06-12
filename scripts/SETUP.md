@@ -2,7 +2,7 @@
 
 For the Arkite Passport example these smart contracts have been deployed on Stargaze and Osmosis testnet:
 
-- [cw_ics721_arkite_passport.wasm v0.1.1](https://github.com/arkprotocol/cw-ics721-callback-example/releases/tag/v0.1.1): checksum 11a314105955772dfc50c540e24e0559dd14b7d78e9cdcb2dc16817dd41ed40b
+- [cw_ics721_arkite_passport.wasm v0.1.1](https://github.com/arkprotocol/cw-ics721-callback-example/releases/tag/v0.1.1): checksum 532d590ba580dd7881b77551ea864818dc309c52e3002b8f5a13e11057fe4d6e
 - [ics721_base.wasm](https://github.com/arkprotocol/ark-cw-ics721/tree/instantiate_with_creator): checksum 47c9da625237df793ed5cdbe91a284d03515421abb48612621554db53567e419
 - [cw721_base.wasm](https://github.com/arkprotocol/cw-nfts/tree/collection-info): checksum 312f82835cbbce2cd2b51354d48616c18870845c1fd19f7132c8b373cef23eb6
 - [cw_ics721_incoming_proxy_base.wasm](https://github.com/arkprotocol/cw-ics721-proxy/releases/tag/v0.1.1): checksum 32dd48b27688b4f7783bccd506006b6c0754db79deccca92a9db13d8e4aa7355
@@ -25,7 +25,7 @@ Smart contracts have been deployed on Osmosis and Stargaze testnet. All code ids
 For testing, there is no need to re-deploy contracts, except:
 
 - new smart contract versions are needed for testing
-- IBC channel has been expired
+- IBC channels have been expired
 
 ### Upload Contracts
 
@@ -33,7 +33,6 @@ For testing, there is no need to re-deploy contracts, except:
 # uploads all wasm binaries provided in scripts folders
 # NOTE: script also updates code ids in env files!
 ./scripts/upload-contracts.sh
-
 ```
 
 ### Arkite Passport contract
@@ -108,14 +107,14 @@ hermes --config ./relayer/hermes/config.toml --json create channel --a-chain $(s
 #     "status": "success"
 # }
 #
-# Manually update CHANNEL_ID in config.toml, stargaze.env, and osmosis.env based on output Hermes results!
+# Manually update CHANNEL_ID in config.toml, config.yaml, stargaze.env, and osmosis.env based on above output!
 
 ```
 
 IMPORTANT: Manually update:
 
 - CHANNEL_ID in stargaze.env and osmosis.env based on output Hermes results!
-- channel and port in config.toml!
+- config.toml (Hermes) and config.yaml (Cosmos rly)!
 
 ### Proxy Contracts and Migrate ICS721
 
@@ -142,15 +141,15 @@ More upcoming features are in the pipe, like:
 Finally, counter party contracts need to be set:
 
 ```sh
+./scripts/setup-counter-party-contracts.sh
 # output:
 # > ...
 # > {"data":"stars1f2fg4jdkfj78y43w8l4w4x0vnmyd80m6seq67reyfty0g42s24jq4r0nyu"}
 # > ...
 # > {"data":"osmo1sg29sdvmkjc7cdlawv8c85khmk55q5lfkkfgc0qpcxgrspere97szgwg9w"}
-./scripts/setup-counter-party-contracts.sh
 ```
 
-### Initial Test Setup
+### Getting Started: Mint and InterChain Transfer an NFT between Osmosis and Stargaze
 
 ICS721 controls collection contracts on other chains (than home chain where NFT originates). In latest `cw721-base v0.19` release
 creator is authorised to update `NftInfo` and extension (aka NFT metadata).
@@ -162,7 +161,9 @@ Hence `arkite-passport` wont be able to update NFTs on target chain.
 Admin to the rescue - on initial transfer, voucher collection is created.
 
 ```sh
-# mint NFT e.g. with output:
+# mint NFT via Arkite Passport contract as minter for cw721 contract:
+./scripts/mint.sh stargaze
+# output:
 # ...
 # > Minted NFT #0
 # > ============ checking NFT
@@ -171,7 +172,6 @@ Admin to the rescue - on initial transfer, voucher collection is created.
 # > stargaze
 # > - nft contract: stars12u499ljeegts85hqx937rpwccuhw48272ke7n7kvkhfznu0ky7mqgz2gv9
 # > - NFT #0, token uri: ipfs://passport/default, owner: stars1qk0hwv23h2kdsewt92apk62f2v40fla8z8qlth (ics721: stars14uelnppq5vsc3dfp8k3ll68cqrdpcf4nrhns9j0v6jnc6k9hj94skccdmh)
-./scripts/mint.sh stargaze
 
 # interchain transfer NFT and relay
 ./scripts/transfer.sh stargaze 0

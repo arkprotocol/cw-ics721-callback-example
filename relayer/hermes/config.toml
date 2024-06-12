@@ -154,8 +154,8 @@ denom = 'ustars'
 policy = 'allow'
 list = [
   # Stargaze ICS721 channels
-  ['wasm.stars17urnsung008eypzpkx6scwft9x7948uc3039ltxrygqwq97nq0asyfm2s9', 'channel-967'],
-  ['wasm.stars17urnsung008eypzpkx6scwft9x7948uc3039ltxrygqwq97nq0asyfm2s9', 'channel-968'], # not WLed in incoming proxy
+  ['wasm.stars17urnsung008eypzpkx6scwft9x7948uc3039ltxrygqwq97nq0asyfm2s9', 'channel-977'],
+  ['wasm.stars17urnsung008eypzpkx6scwft9x7948uc3039ltxrygqwq97nq0asyfm2s9', 'channel-978'], # not WLed in incoming proxy
 ]
 
 [chains.packet_filter.min_fees]
@@ -209,8 +209,8 @@ denom = "uosmo"
 policy = "allow"
 list = [
   # Osmosis ICS721 channels
-  ['wasm.osmo1pgqueks7m5fw8gjta6kg6slk4qfvdkgavlwnvzwt8d9ejufyz4tssl5j70', 'channel-8016'],
-  ['wasm.osmo1pgqueks7m5fw8gjta6kg6slk4qfvdkgavlwnvzwt8d9ejufyz4tssl5j70', 'channel-8017'], # not WLed in incoming proxy
+  ['wasm.osmo1pgqueks7m5fw8gjta6kg6slk4qfvdkgavlwnvzwt8d9ejufyz4tssl5j70', 'channel-8134'],
+  ['wasm.osmo1pgqueks7m5fw8gjta6kg6slk4qfvdkgavlwnvzwt8d9ejufyz4tssl5j70', 'channel-8135'], # not WLed in incoming proxy
 ]
 
 [chains.packet_filter.min_fees]
